@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title><?= htmlspecialchars($session['title']) ?> - CAT System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- MathJax for Mathematical Formulas -->
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            }
+        };
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #mobile-warning {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #ff6b6b;
+            color: white;
+            padding: 8px;
+            text-align: center;
+            z-index: 10000;
+            font-size: 12px;
+            font-weight: bold;
+            display: none;
+        }
+        
+        #violation-counter {
+            position: fixed;
+            top: 50px;
+            right: 10px;
+            background: rgba(255, 107, 107, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            z-index: 9999;
+            font-weight: bold;
+            display: none;
+        }
+        
+        .main-container {
+            display: flex;
+            height: 100vh;
+            padding-top: 60px;
+        }
+        
+        .exam-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            margin-right: 300px;
+        }
+        
+        .navigation-panel {
+            position: fixed;
+            top: 60px;
+            right: 0;
+            width: 280px;
+            height: calc(100vh - 60px);
+            background: #f8f9fa;
+            border-left: 2px solid #dee2e6;
+            padding: 20px;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        
+        .timer {
+            position: fixed;
+            top: 10px;
+            left: 20px;
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 9998;
+        }
+        
+        .exam-info {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 9998;
+        }
+        
+        .question-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none; /* Hide all questions by default */
+        }
+        
+        .question-card:first-of-type {
+            display: block; /* Show first question by default */
+        }
+        
+        .option-label {
+            display: block;
+            padding: 15px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #fff;
+        }
+        
+        .option-label:hover {
+            background: #f0f8ff;
+            border-color: #007bff;
+        }
+        
+        .option-label input[type="radio"]:checked + span {
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .option-label input[type="radio"]:checked {
+            accent-color: #007bff;
+        }
+        
+        .option-label.selected {
+            background: #e3f2fd;
+            border-color: #007bff;
+        }
+        
+        .navigation-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .nav-number {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            background: white;
+        }
+        
+        .nav-number.answered {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        
+        .nav-number.doubt {
+            background: #ffc107;
+            color: #212529;
+            border-color: #ffc107;
+        }
+        
+        .nav-number.unanswered {
+            background: #dc3545;
+            color: white;
+            border-color: #dc3545;
+        }
+        
+        .nav-number.current {
+            border-width: 3px;
+            border-color: #007bff;
+            box-shadow: 0 0 10px rgba(0,123,255,0.5);
+        }
+        
+        .nav-number:hover {
+            transform: scale(1.1);
+        }
+        
+        .legend {
+            margin-bottom: 20px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        
+        .navigation-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+            gap: 10px;
+        }
+        
+        .nav-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .prev-btn {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .prev-btn:hover:not(:disabled) {
+            background: #5a6268;
+        }
+        
+        .next-btn {
+            background: #007bff;
+            color: white;
+        }
+        
+        .next-btn:hover:not(:disabled) {
+            background: #0056b3;
+        }
+        
+        .doubt-btn {
+            background: #ffc107;
+            color: #212529;
+            margin-top: 15px;
+            width: 100%;
+        }
+        
+        .doubt-btn:hover {
+            background: #e0a800;
+        }
+        
+        .doubt-btn.active {
+            background: #ff8c00;
+        }
+        
+        .submit-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 300px;
+            padding: 15px 30px;
+            font-size: 18px;
+            z-index: 9997;
+            background: #28a745;
+            border: none;
+            color: white;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .submit-btn:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+        
+        .progress-info {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .progress-info h6 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-weight: bold;
+            font-size: 16px;
+            display: block;
+        }
+        
+        /* Mobile Responsiveness */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .exam-content {
+                margin-right: 0;
+                margin-bottom: 200px;
+            }
+            
+            .navigation-panel {
+                position: fixed;
+                bottom: 0;
+                top: auto;
+                left: 0;
+                right: 0;
+                width: 100%;
+                height: 180px;
+                padding: 10px;
+                border-left: none;
+                border-top: 2px solid #dee2e6;
+            }
+            
+            .navigation-grid {
+                grid-template-columns: repeat(10, 1fr);
+                gap: 5px;
+            }
+            
+            .nav-number {
+                width: 30px;
+                height: 30px;
+                font-size: 12px;
+            }
+            
+            .submit-btn {
+                bottom: 190px;
+                right: 20px;
+            }
+            
+            .progress-info, .legend {
+                display: none;
+            }
+            
+            .navigation-controls {
+                margin-top: 10px;
+            }
+            
+            .doubt-btn {
+                margin-top: 5px;
+                padding: 8px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="mobile-warning">
+        ⚠️ JANGAN KELUAR DARI BROWSER! Pelanggaran: <span id="warning-count">0</span>/3
+    </div>
+    
+    <div id="fullscreen-prompt" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 99999; display: flex; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 50px; border-radius: 15px; text-align: center; max-width: 600px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+            <div style="font-size: 80px; margin-bottom: 20px;">🖥️</div>
+            <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 28px;">Mode Fullscreen Diperlukan</h2>
+            <p style="margin-bottom: 30px; font-size: 18px; color: #7f8c8d; line-height: 1.6;">
+                Untuk memulai ujian, Anda harus mengaktifkan mode fullscreen.<br>
+                Klik tombol di bawah untuk melanjutkan.
+            </p>
+            <button id="start-fullscreen-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 20px 60px; font-size: 20px; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); transition: all 0.3s;">
+                🚀 Mulai Ujian (Fullscreen)
+            </button>
+            <p style="margin-top: 20px; font-size: 14px; color: #95a5a6;">
+                ⚠️ Jangan keluar dari fullscreen selama ujian berlangsung
+            </p>
+        </div>
+    </div>
+    
+    <div id="violation-counter">
+        🚨 Pelanggaran: <span id="violation-count">0</span>/3
+    </div>
+    
+    <div class="timer" id="timer">
+        ⏱️ <span id="time-display">--:--</span> <small style="font-size: 0.8em; opacity: 0.8;">WIB</small>
+    </div>
+    
+    <div class="exam-info">
+        📝 <?= htmlspecialchars($session['title']) ?>
+    </div>
+    
+    <div class="main-container">
+        <div class="exam-content">
+            <form id="exam-form">
+                <?php $no = 1; ?>
+                <?php foreach ($questions as $q): ?>
+                    <div class="question-card" id="question-<?= $no ?>" <?= $no === 1 ? 'style="display: block;"' : '' ?>>
+                        <div class="question-header">
+                            <h4 style="color: #2c3e50; font-weight: 600; margin-bottom: 25px;">
+                                <i class="fas fa-question-circle" style="color: #3498db;"></i> 
+                                Soal <?= $no ?> dari <?= count($questions) ?>
+                            </h4>
+                        </div>
+                    
+                    <!-- Question Text -->
+                    <?php if (!empty(trim($q['question_text']))): ?>
+                        <div class="question-text" style="margin-bottom: 20px; line-height: 1.6; font-size: 16px;">
+                            <?= nl2br(autoConvertMath($q['question_text'])) ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <!-- Question Image -->
+                    <?php if (!empty($q['question_image'])): ?>
+                        <div class="question-image" style="margin: 20px 0; text-align: center; background: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e9ecef;">
+                            <?php 
+                            $imagePath = config('app_url') . '/uploads/questions/' . $q['question_image'];
+                            ?>
+                            
+                            <img src="<?= $imagePath ?>" 
+                                 alt="Gambar Soal <?= $no ?>" 
+                                 style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); cursor: pointer; transition: transform 0.3s ease; border: 1px solid #dee2e6;"
+                                 onclick="toggleImageZoom(this)"
+                                 title="Klik untuk memperbesar/mengecilkan gambar"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            
+                            <!-- Error fallback -->
+                            <div style="display: none; background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 8px; color: #721c24;">
+                                <i class="fas fa-exclamation-triangle"></i> 
+                                <strong>Gambar tidak dapat dimuat</strong><br>
+                                <small>Silakan hubungi pengawas ujian</small>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <!-- Warning if no content -->
+                    <?php if (empty(trim($q['question_text'])) && empty($q['question_image'])): ?>
+                        <div class="alert alert-warning" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; color: #856404;">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            <strong>Perhatian:</strong> Konten soal tidak tersedia. Silakan hubungi pengawas ujian.
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($q['type'] === 'multiple_choice'): ?>
+                        <div class="options">
+                            <?php foreach (['A', 'B', 'C', 'D', 'E'] as $opt): ?>
+                                <?php if (!empty($q['option_' . strtolower($opt)])): ?>
+                                    <label class="option-label" onclick="selectOption(this, <?= $q['id'] ?>, '<?= $opt ?>', <?= $no ?>)">
+                                        <input type="radio" 
+                                               name="answer_<?= $q['id'] ?>" 
+                                               value="<?= $opt ?>"
+                                               <?= (isset($answers[$q['id']]) && $answers[$q['id']] === $opt) ? 'checked' : '' ?>
+                                               onchange="selectOption(this.parentNode, <?= $q['id'] ?>, '<?= $opt ?>', <?= $no ?>)">
+                                        <span><?= $opt ?>. <?= autoConvertMath($q['option_' . strtolower($opt)]) ?></span>
+                                    </label>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                <?php $no++; ?>
+            <?php endforeach; ?>
+        </form>
+        
+        <!-- Navigation Panel -->
+        <div class="navigation-panel">
+            <div class="progress-info">
+                <h6>� Progress Ujian</h6>
+                <div class="progress-stats">
+                    <div class="stat-item">
+                        <span class="stat-number" id="answered-count" style="color: #28a745;">0</span>
+                        <small>Dijawab</small>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="doubt-count" style="color: #ffc107;">0</span>
+                        <small>Ragu</small>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="unanswered-count" style="color: #dc3545;"><?= count($questions) ?></span>
+                        <small>Belum</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="legend">
+                <h6>🎯 Keterangan Status</h6>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #28a745;"></div>
+                    <span>Sudah dijawab</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffc107;"></div>
+                    <span>Masih ragu-ragu</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #dc3545;"></div>
+                    <span>Belum dijawab</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: white; border: 3px solid #007bff;"></div>
+                    <span>Soal aktif</span>
+                </div>
+            </div>
+            
+            <h6>🔢 Navigasi Soal</h6>
+            <div class="navigation-grid">
+                <?php for ($i = 1; $i <= count($questions); $i++): ?>
+                    <div class="nav-number unanswered <?= $i === 1 ? 'current' : '' ?>" 
+                         id="nav-<?= $i ?>" 
+                         onclick="goToQuestion(<?= $i ?>)"
+                         title="Soal <?= $i ?>">
+                        <?= $i ?>
+                    </div>
+                <?php endfor; ?>
+            </div>
+            
+            <button class="doubt-btn" id="doubt-btn" onclick="toggleDoubt()">
+                <i class="fas fa-question-circle"></i> Tandai Ragu-ragu
+            </button>
+            
+            <div class="navigation-controls">
+                <button class="nav-btn prev-btn" id="prev-btn" onclick="previousQuestion()" disabled>
+                    <i class="fas fa-chevron-left"></i> Sebelumnya
+                </button>
+                <button class="nav-btn next-btn" id="next-btn" onclick="nextQuestion()">
+                    Selanjutnya <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <button class="btn btn-success submit-btn" onclick="submitExam()">
+        <i class="fas fa-paper-plane"></i> Kumpulkan Ujian
+    </button>
+
+    <script>
+        const sessionId = <?= $session['id'] ?>;
+        let remainingTime = <?= $session['remaining_time'] ?>;
+        let currentQuestion = 1;
+        const totalQuestions = <?= count($questions) ?>;
+        let questionStatus = {}; // Track status: answered, doubt, unanswered
+        let questionAnswers = {}; // Track answers
+        
+        // Map question number to question ID
+        const questionIdMap = {
+            <?php $no = 1; foreach ($questions as $q): ?>
+            <?= $no ?>: <?= $q['id'] ?>,
+            <?php $no++; endforeach; ?>
+        };
+        console.log('Question ID Map:', questionIdMap);
+        
+        // ANTI-CHEATING: Violation tracking
+        let violationCount = 0;
+        const maxViolations = 3;
+        let isFullscreen = false;
+        let isSubmitting = false;
+        
+        // Initialize question status
+        for (let i = 1; i <= totalQuestions; i++) {
+            questionStatus[i] = 'unanswered';
+        }
+        
+        // Load existing answers if any
+        <?php if (!empty($answers)): ?>
+            <?php 
+            $questionIds = array_column($questions, 'id');
+            foreach ($answers as $qId => $answer): 
+                $questionIndex = array_search($qId, $questionIds);
+                if ($questionIndex !== false):
+                    $questionNum = $questionIndex + 1;
+            ?>
+                questionAnswers[<?= $questionNum ?>] = '<?= $answer ?>';
+                questionStatus[<?= $questionNum ?>] = 'answered';
+            <?php 
+                endif;
+            endforeach; 
+            ?>
+            
+            // Mark existing answers in UI after page loads
+            setTimeout(function() {
+                <?php foreach ($answers as $qId => $answer): 
+                    $questionIndex = array_search($qId, $questionIds);
+                    if ($questionIndex !== false):
+                ?>
+                    const radio<?= $qId ?> = document.querySelector(`input[name="answer_<?= $qId ?>"][value="<?= $answer ?>"]`);
+                    if (radio<?= $qId ?>) {
+                        radio<?= $qId ?>.checked = true;
+                        radio<?= $qId ?>.closest('.option-label').classList.add('selected');
+                    }
+                <?php 
+                    endif;
+                endforeach; 
+                ?>
+                updateNavigationDisplay();
+            }, 100);
+        <?php endif; ?>
+        
+        // ANTI-CHEATING DINONAKTIFKAN SEMENTARA
+        // Untuk memastikan ujian berjalan lancar
+        
+        // Timer
+        let timerInterval;
+        let lastSavedTime = remainingTime; // Track last saved time
+        
+        function updateTimer() {
+            if (remainingTime <= 0) {
+                clearInterval(timerInterval);
+                alert('Waktu ujian telah habis! Ujian akan dikumpulkan otomatis.');
+                submitExam(true); // Auto submit
+                return;
+            }
+            
+            const minutes = Math.floor(remainingTime / 60);
+            const seconds = remainingTime % 60;
+            document.getElementById('time-display').textContent = 
+                String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+            
+            // Warning when 5 minutes left
+            if (remainingTime === 300) { // 5 minutes
+                alert('⚠️ Perhatian: Waktu ujian tersisa 5 menit!');
+            }
+            
+            // Warning when 1 minute left
+            if (remainingTime === 60) { // 1 minute
+                alert('⚠️ Perhatian: Waktu ujian tersisa 1 menit!');
+            }
+            
+            remainingTime--;
+            
+            // CRITICAL FIX: Auto-save remaining time every 5 seconds
+            if (lastSavedTime - remainingTime >= 5) {
+                saveRemainingTime();
+                lastSavedTime = remainingTime;
+            }
+        }
+        
+        // CRITICAL FIX: Function to save remaining time to database
+        function saveRemainingTime() {
+            fetch('<?= config('app_url') ?>/exam/saveTime', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    remaining_time: remainingTime
+                })
+            }).catch(err => {
+                console.error('Failed to save time:', err);
+                // Don't show error to user, just log it
+            });
+        }
+        
+        // CRITICAL FIX: Save time before page unload (reload/close)
+        window.addEventListener('beforeunload', function(e) {
+            // Use synchronous request to ensure it completes before unload
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '<?= config('app_url') ?>/exam/saveTime', false); // false = synchronous
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify({
+                session_id: sessionId,
+                remaining_time: remainingTime
+            }));
+        });
+        
+        timerInterval = setInterval(updateTimer, 1000);
+        updateTimer(); // Initial call
+        
+        // Navigation functions
+        function goToQuestion(questionNum) {
+            if (questionNum < 1 || questionNum > totalQuestions) return;
+            
+            // Hide current question
+            document.getElementById(`question-${currentQuestion}`).style.display = 'none';
+            document.getElementById(`nav-${currentQuestion}`).classList.remove('current');
+            
+            // Show target question
+            currentQuestion = questionNum;
+            document.getElementById(`question-${currentQuestion}`).style.display = 'block';
+            document.getElementById(`nav-${currentQuestion}`).classList.add('current');
+            
+            // Update navigation buttons
+            document.getElementById('prev-btn').disabled = (currentQuestion === 1);
+            document.getElementById('next-btn').disabled = (currentQuestion === totalQuestions);
+            
+            // Update doubt button
+            updateDoubtButton();
+            
+            // Update MathJax for new question
+            if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+                MathJax.typesetPromise([document.getElementById(`question-${currentQuestion}`)]).catch((err) => console.log(err));
+            }
+        }
+        
+        function nextQuestion() {
+            if (currentQuestion < totalQuestions) {
+                goToQuestion(currentQuestion + 1);
+            }
+        }
+        
+        function previousQuestion() {
+            if (currentQuestion > 1) {
+                goToQuestion(currentQuestion - 1);
+            }
+        }
+        
+        // Answer selection
+        function selectOption(label, questionId, answer, questionNum) {
+            // Update visual selection
+            const allLabels = label.parentNode.querySelectorAll('.option-label');
+            allLabels.forEach(l => l.classList.remove('selected'));
+            label.classList.add('selected');
+            
+            // Check the radio button
+            const radio = label.querySelector('input[type="radio"]');
+            if (radio) {
+                radio.checked = true;
+            }
+            
+            // Save answer
+            questionAnswers[questionNum] = answer;
+            
+            // Update status (remove doubt if was doubt, set as answered)
+            if (questionStatus[questionNum] === 'doubt') {
+                questionStatus[questionNum] = 'answered';
+            } else {
+                questionStatus[questionNum] = 'answered';
+            }
+            
+            // Update navigation display
+            updateNavigationDisplay();
+            
+            // Save to server
+            saveAnswer(questionId, answer);
+        }
+        
+        // Doubt functionality
+        function toggleDoubt() {
+            const currentStatus = questionStatus[currentQuestion];
+            
+            if (currentStatus === 'doubt') {
+                // Remove doubt - set back to answered if has answer, otherwise unanswered
+                questionStatus[currentQuestion] = questionAnswers[currentQuestion] ? 'answered' : 'unanswered';
+            } else {
+                // Set as doubt
+                questionStatus[currentQuestion] = 'doubt';
+            }
+            
+            updateNavigationDisplay();
+            updateDoubtButton();
+        }
+        
+        function updateDoubtButton() {
+            const btn = document.getElementById('doubt-btn');
+            if (questionStatus[currentQuestion] === 'doubt') {
+                btn.classList.add('active');
+                btn.innerHTML = '<i class="fas fa-check-circle"></i> Hapus Tanda Ragu';
+            } else {
+                btn.classList.remove('active');
+                btn.innerHTML = '<i class="fas fa-question-circle"></i> Tandai Ragu-ragu';
+            }
+        }
+        
+        // Update navigation display
+        function updateNavigationDisplay() {
+            let answeredCount = 0;
+            let doubtCount = 0;
+            let unansweredCount = 0;
+            
+            for (let i = 1; i <= totalQuestions; i++) {
+                const navElement = document.getElementById(`nav-${i}`);
+                const status = questionStatus[i];
+                
+                // Remove all status classes
+                navElement.classList.remove('answered', 'doubt', 'unanswered');
+                
+                // Add current status class
+                navElement.classList.add(status);
+                
+                // Count statuses
+                switch (status) {
+                    case 'answered': answeredCount++; break;
+                    case 'doubt': doubtCount++; break;
+                    case 'unanswered': unansweredCount++; break;
+                }
+            }
+            
+            // Update counters
+            document.getElementById('answered-count').textContent = answeredCount;
+            document.getElementById('doubt-count').textContent = doubtCount;
+            document.getElementById('unanswered-count').textContent = unansweredCount;
+        }
+        
+        // Save answer to server with retry mechanism
+        function saveAnswer(questionId, answer, retryCount = 0) {
+            const baseUrl = '<?= config('app_url') ?>';
+            const maxRetries = 3;
+            const timeout = 10000; // 10 seconds timeout
+            
+            // Create abort controller for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            
+            fetch(baseUrl + '/exam/saveAnswer', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `session_id=${sessionId}&question_id=${questionId}&answer=${answer}`,
+                signal: controller.signal
+            })
+            .then(response => {
+                clearTimeout(timeoutId);
+                return response.json();
+            })
+            .then(data => {
+                if (!data.success) {
+                    console.error('Error saving answer:', data.message);
+                    // Retry if not max retries
+                    if (retryCount < maxRetries) {
+                        console.log(`Retrying save answer (attempt ${retryCount + 1}/${maxRetries})...`);
+                        setTimeout(() => saveAnswer(questionId, answer, retryCount + 1), 1000);
+                    } else {
+                        showNotification('Gagal menyimpan jawaban: ' + data.message, 'error');
+                    }
+                } else {
+                    // Success - show brief success message
+                    if (retryCount > 0) {
+                        showNotification('Jawaban berhasil tersimpan', 'success');
+                    }
+                }
+            })
+            .catch(error => {
+                clearTimeout(timeoutId);
+                console.error('Network error saving answer:', error);
+                
+                // Retry if not max retries
+                if (retryCount < maxRetries) {
+                    console.log(`Retrying save answer (attempt ${retryCount + 1}/${maxRetries})...`);
+                    setTimeout(() => saveAnswer(questionId, answer, retryCount + 1), 1000);
+                } else {
+                    showNotification('Koneksi bermasalah, jawaban mungkin tidak tersimpan. Coba lagi.', 'warning');
+                }
+            });
+        }
+        
+        // Show notification to user
+        function showNotification(message, type = 'info') {
+            // Create notification element if it doesn't exist
+            let notification = document.getElementById('notification');
+            if (!notification) {
+                notification = document.createElement('div');
+                notification.id = 'notification';
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    color: white;
+                    font-weight: bold;
+                    z-index: 9999;
+                    display: none;
+                `;
+                document.body.appendChild(notification);
+            }
+            
+            // Set color based on type
+            const colors = {
+                'success': '#28a745',
+                'error': '#dc3545',
+                'warning': '#ffc107',
+                'info': '#17a2b8'
+            };
+            
+            notification.style.backgroundColor = colors[type] || colors.info;
+            notification.textContent = message;
+            notification.style.display = 'block';
+            
+            // Auto hide after 3 seconds
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Submit exam
+        function submitExam(autoSubmit = false) {
+            const unansweredCount = Object.values(questionStatus).filter(status => status === 'unanswered').length;
+            
+            // CRITICAL FIX: Remove strict validation - allow submit even with unanswered questions
+            // This is emergency fix for students who are stuck
+            // Backend will handle the validation if needed
+            
+            let confirmMessage;
+            if (autoSubmit) {
+                confirmMessage = 'Waktu ujian telah habis. Ujian akan dikumpulkan sekarang.';
+            } else {
+                if (unansweredCount > 0) {
+                    confirmMessage = `Masih ada ${unansweredCount} soal yang belum dijawab.\n\nYakin ingin mengumpulkan ujian sekarang?\n\nSetelah dikumpulkan, Anda tidak dapat mengubah jawaban lagi.`;
+                } else {
+                    confirmMessage = 'Yakin ingin mengumpulkan ujian?\n\nSetelah dikumpulkan, Anda tidak dapat mengubah jawaban lagi.';
+                }
+            }
+            
+            if (autoSubmit || confirm(confirmMessage)) {
+                // CRITICAL FIX: Set flag to prevent beforeunload warning
+                isSubmitting = true;
+                
+                // Stop timer
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                }
+                
+                // Save remaining time before submit
+                saveRemainingTime();
+                
+                // Disable all buttons to prevent double submission
+                document.getElementById('prev-btn').disabled = true;
+                document.getElementById('next-btn').disabled = true;
+                document.getElementById('doubt-btn').disabled = true;
+                document.querySelector('.submit-btn').disabled = true;
+                
+                // Show loading
+                document.querySelector('.submit-btn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengumpulkan...';
+                
+                // CRITICAL FIX: Use fetch with timeout instead of direct redirect
+                const baseUrl = '<?= config('app_url') ?>';
+                
+                // Set timeout for submit (30 seconds)
+                const submitTimeout = setTimeout(() => {
+                    alert('Submit timeout! Mencoba lagi...');
+                    // Fallback: direct redirect
+                    window.location.href = baseUrl + '/exam/submit/' + sessionId;
+                }, 30000);
+                
+                // Try fetch first for better error handling
+                fetch(baseUrl + '/exam/submit/' + sessionId, {
+                    method: 'GET',
+                    credentials: 'same-origin'
+                })
+                .then(response => {
+                    clearTimeout(submitTimeout);
+                    if (response.ok) {
+                        // Success, redirect to result
+                        window.location.href = baseUrl + '/exam/result/' + sessionId;
+                    } else {
+                        // Error, but still redirect (backend will handle)
+                        window.location.href = baseUrl + '/exam/submit/' + sessionId;
+                    }
+                })
+                .catch(error => {
+                    clearTimeout(submitTimeout);
+                    console.error('Submit error:', error);
+                    // Fallback: direct redirect
+                    window.location.href = baseUrl + '/exam/submit/' + sessionId;
+                });
+            }
+        }
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowLeft' && currentQuestion > 1) {
+                previousQuestion();
+            } else if (e.key === 'ArrowRight' && currentQuestion < totalQuestions) {
+                nextQuestion();
+            }
+        });
+        
+        // Initialize display
+        document.addEventListener('DOMContentLoaded', function() {
+            updateNavigationDisplay();
+            updateDoubtButton();
+            
+            // Show first question
+            goToQuestion(1);
+            
+            // ANTI-CHEATING: Show fullscreen prompt (user must click to activate)
+            const fullscreenBtn = document.getElementById('start-fullscreen-btn');
+            if (fullscreenBtn) {
+                fullscreenBtn.addEventListener('click', function() {
+                    requestFullscreen();
+                    document.getElementById('fullscreen-prompt').style.display = 'none';
+                });
+            }
+            
+            // ANTI-CHEATING: Monitor fullscreen changes
+            document.addEventListener('fullscreenchange', handleFullscreenChange);
+            document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+            document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+            document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+            
+            // ANTI-CHEATING: Monitor tab switching ONLY (not window blur for better UX)
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            console.log('Anti-cheating initialized! Max violations:', maxViolations, 'Current count:', violationCount);
+            
+            // ANTI-CHEATING: Continuous fullscreen check every 500ms
+            setInterval(function() {
+                if (!isSubmitting && !isFullscreen) {
+                    const isCurrentlyFullscreen = !!(document.fullscreenElement || 
+                                                     document.webkitFullscreenElement || 
+                                                     document.mozFullScreenElement || 
+                                                     document.msFullscreenElement);
+                    
+                    if (!isCurrentlyFullscreen) {
+                        console.log('Not in fullscreen, forcing back...');
+                        requestFullscreen();
+                    }
+                }
+            }, 500);
+            
+            // CRITICAL FIX: Prevent page refresh and navigation away (but allow during submit)
+            window.addEventListener('beforeunload', function(e) {
+                // Don't show warning if submitting
+                if (isSubmitting) {
+                    return undefined;
+                }
+                
+                e.preventDefault();
+                e.returnValue = 'Anda yakin ingin meninggalkan halaman ujian? Progress ujian akan hilang!';
+                return 'Anda yakin ingin meninggalkan halaman ujian? Progress ujian akan hilang!';
+            });
+            
+            // Disable right click
+            document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+            });
+            
+            // Disable F12, Ctrl+Shift+I, etc.
+            document.addEventListener('keydown', function(e) {
+                // ANTI-CHEATING: Block ESC key to prevent exiting fullscreen
+                if (e.key === 'Escape' && !isSubmitting) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    alert('⚠️ Tidak bisa keluar dari fullscreen!\n\nAnda harus tetap dalam mode fullscreen sampai ujian selesai.');
+                    return false;
+                }
+                
+                // Disable F12
+                if (e.key === 'F12') {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // Disable Ctrl+Shift+I (Developer Tools)
+                if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // Disable Ctrl+U (View Source)
+                if (e.ctrlKey && e.key === 'u') {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // Disable Ctrl+S (Save)
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // Allow navigation keys
+                if (e.key === 'ArrowLeft' && currentQuestion > 1) {
+                    previousQuestion();
+                } else if (e.key === 'ArrowRight' && currentQuestion < totalQuestions) {
+                    nextQuestion();
+                }
+            });
+        });
+        
+        // Prevent back button
+        history.pushState(null, null, location.href);
+        window.onpopstate = function() {
+            history.go(1);
+        };
+        
+        // ============================================
+        // ANTI-CHEATING FUNCTIONS
+        // ============================================
+        
+        // Request fullscreen
+        function requestFullscreen() {
+            const elem = document.documentElement;
+            
+            console.log('Requesting fullscreen...');
+            
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().then(() => {
+                    console.log('Fullscreen activated');
+                }).catch(err => {
+                    console.error('Fullscreen request failed:', err);
+                    showViolationWarning('⚠️ Mohon izinkan fullscreen! Klik tombol hijau di atas untuk fullscreen.');
+                });
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else if (elem.mozRequestFullScreen) {
+                elem.mozRequestFullScreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen();
+            } else {
+                console.error('Fullscreen API not supported');
+                showViolationWarning('⚠️ Browser Anda tidak support fullscreen. Gunakan Chrome/Firefox.');
+            }
+        }
+        
+        // Handle fullscreen change
+        function handleFullscreenChange() {
+            const isCurrentlyFullscreen = !!(document.fullscreenElement || 
+                                             document.webkitFullscreenElement || 
+                                             document.mozFullScreenElement || 
+                                             document.msFullscreenElement);
+            
+            if (isCurrentlyFullscreen) {
+                isFullscreen = true;
+                hideViolationWarning();
+            } else {
+                isFullscreen = false;
+                
+                // If not submitting, this is a violation
+                if (!isSubmitting) {
+                    recordViolation('Keluar dari fullscreen');
+                    
+                    // FORCE back to fullscreen IMMEDIATELY (no delay)
+                    requestFullscreen();
+                    
+                    // Also retry after short delay in case first attempt fails
+                    setTimeout(() => {
+                        if (!isSubmitting && !isFullscreen) {
+                            requestFullscreen();
+                        }
+                    }, 100);
+                }
+            }
+        }
+        
+        // Handle visibility change (tab switching)
+        function handleVisibilityChange() {
+            console.log('Visibility changed! hidden:', document.hidden, 'isSubmitting:', isSubmitting, 'violationCount:', violationCount);
+            
+            if (document.hidden && !isSubmitting) {
+                console.log('Tab hidden - recording violation');
+                recordViolation('Berpindah tab/window');
+            } else if (!document.hidden && !isSubmitting && violationCount > 0) {
+                console.log('Tab visible again - showing warning');
+                // When coming back to tab, show big warning if not yet at max violations
+                if (violationCount < maxViolations) {
+                    showBigWarning();
+                }
+            }
+        }
+        
+        // Show big warning overlay
+        function showBigWarning() {
+            const warningDiv = document.createElement('div');
+            warningDiv.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(231, 76, 60, 0.95);
+                z-index: 999999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: fadeIn 0.3s;
+            `;
+            
+            warningDiv.innerHTML = `
+                <div style="background: white; padding: 50px; border-radius: 20px; text-align: center; max-width: 600px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+                    <div style="font-size: 100px; margin-bottom: 20px;">⚠️</div>
+                    <h1 style="color: #e74c3c; margin-bottom: 20px; font-size: 36px;">PELANGGARAN TERDETEKSI!</h1>
+                    <p style="font-size: 24px; margin-bottom: 20px; color: #2c3e50;">
+                        Anda berpindah tab/window!
+                    </p>
+                    <p style="font-size: 20px; margin-bottom: 30px; color: #7f8c8d;">
+                        Jangan buka Google atau aplikasi lain!
+                    </p>
+                    <div style="background: #fadbd8; padding: 20px; border-radius: 10px; margin-bottom: 30px;">
+                        <p style="font-size: 28px; font-weight: bold; color: #c0392b; margin: 0;">
+                            Pelanggaran: ${violationCount}/3
+                        </p>
+                        <p style="font-size: 18px; color: #e74c3c; margin: 10px 0 0 0;">
+                            ${3 - violationCount} kesempatan tersisa
+                        </p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" style="background: #27ae60; color: white; border: none; padding: 20px 50px; font-size: 20px; border-radius: 50px; cursor: pointer; font-weight: bold;">
+                        Saya Mengerti
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(warningDiv);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (warningDiv.parentElement) {
+                    warningDiv.remove();
+                }
+            }, 5000);
+        }
+        
+        // Record violation
+        function recordViolation(reason) {
+            console.log('=== RECORD VIOLATION START ===');
+            console.log('Current violationCount:', violationCount);
+            console.log('maxViolations:', maxViolations);
+            console.log('isSubmitting:', isSubmitting);
+            
+            // Check if already suspended or submitting
+            if (isSubmitting) {
+                console.log('Already submitting, ignoring violation');
+                return;
+            }
+            
+            if (violationCount >= maxViolations) {
+                console.log('Already at max violations, ignoring');
+                return;
+            }
+            
+            // Increment violation count
+            violationCount++;
+            console.log('NEW violationCount:', violationCount);
+            
+            // Update violation counter display
+            const counterEl = document.getElementById('violation-count');
+            const warningEl = document.getElementById('warning-count');
+            if (counterEl) counterEl.textContent = violationCount;
+            if (warningEl) warningEl.textContent = violationCount;
+            
+            // Show violation counter
+            const violationCounterEl = document.getElementById('violation-counter');
+            const mobileWarningEl = document.getElementById('mobile-warning');
+            if (violationCounterEl) violationCounterEl.style.display = 'block';
+            if (mobileWarningEl) mobileWarningEl.style.display = 'block';
+            
+            // Log violation to server
+            fetch('<?= config('app_url') ?>/exam/logViolation', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `session_id=${sessionId}&reason=${encodeURIComponent(reason)}&count=${violationCount}`
+            }).catch(err => console.error('Failed to log violation:', err));
+            
+            // Check if max violations reached
+            console.log('Checking if max reached:', violationCount, '>=', maxViolations, '=', (violationCount >= maxViolations));
+            
+            if (violationCount >= maxViolations) {
+                console.log('!!! MAX VIOLATIONS REACHED - SUSPENDING NOW !!!');
+                
+                // Mark as submitting immediately to prevent more violations
+                isSubmitting = true;
+                
+                // Stop all event listeners
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+                console.log('Event listener removed');
+                
+                // Immediately suspend and submit
+                console.log('Calling suspendAndSubmitExam...');
+                suspendAndSubmitExam();
+            } else {
+                console.log('Not at max yet, continuing...');
+            }
+            
+            console.log('=== RECORD VIOLATION END ===');
+        }
+        
+        // Suspend exam and auto submit
+        function suspendAndSubmitExam() {
+            console.log('=== SUSPEND AND SUBMIT EXAM START ===');
+            
+            // Stop timer
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            
+            // Show suspension overlay
+            const suspendDiv = document.createElement('div');
+            suspendDiv.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(192, 57, 43, 0.98);
+                z-index: 9999999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            
+            suspendDiv.innerHTML = `
+                <div style="background: white; padding: 60px; border-radius: 20px; text-align: center; max-width: 700px; box-shadow: 0 20px 60px rgba(0,0,0,0.7);">
+                    <div style="font-size: 120px; margin-bottom: 20px;">❌</div>
+                    <h1 style="color: #c0392b; margin-bottom: 20px; font-size: 42px;">UJIAN DI-SUSPEND!</h1>
+                    <p style="font-size: 24px; margin-bottom: 20px; color: #2c3e50; font-weight: bold;">
+                        Anda telah melakukan 3x pelanggaran
+                    </p>
+                    <p style="font-size: 20px; margin-bottom: 30px; color: #7f8c8d;">
+                        Ujian Anda akan otomatis dikumpulkan dan di-suspend
+                    </p>
+                    <div style="background: #fadbd8; padding: 25px; border-radius: 10px; margin-bottom: 30px;">
+                        <p style="font-size: 22px; color: #c0392b; margin: 0;">
+                            Hubungi pengawas ujian untuk informasi lebih lanjut
+                        </p>
+                    </div>
+                    <p id="submit-status" style="font-size: 18px; color: #95a5a6;">Mengumpulkan jawaban...</p>
+                </div>
+            `;
+            
+            document.body.appendChild(suspendDiv);
+            console.log('Overlay displayed');
+            
+            // Mark as submitting to prevent further violations
+            isSubmitting = true;
+            
+            // Prepare form data for submission
+            const formData = new FormData();
+            formData.append('session_id', sessionId);
+            
+            console.log('Session ID:', sessionId);
+            console.log('Question Answers:', questionAnswers);
+            console.log('Question ID Map:', questionIdMap);
+            
+            // Add all answers using the questionIdMap
+            let answerCount = 0;
+            for (let questionNum in questionAnswers) {
+                if (questionAnswers[questionNum]) {
+                    // Get the actual question ID from the map
+                    const questionId = questionIdMap[questionNum];
+                    if (questionId) {
+                        formData.append('answers[' + questionId + ']', questionAnswers[questionNum]);
+                        answerCount++;
+                        console.log('Adding answer: Q' + questionNum + ' (ID:' + questionId + ') =', questionAnswers[questionNum]);
+                    } else {
+                        console.warn('No question ID found for question number:', questionNum);
+                    }
+                }
+            }
+            
+            console.log('Total answers to submit:', answerCount);
+            
+            // Submit exam first
+            console.log('Submitting exam...');
+            fetch('<?= config('app_url') ?>/exam/submit/' + sessionId, {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                console.log('Submit response:', response.status);
+                return response.text();
+            }).then(data => {
+                console.log('Submit result:', data);
+                // Then mark as suspended
+                console.log('Marking as suspended...');
+                return fetch('<?= config('app_url') ?>/exam/suspendSession', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: `session_id=${sessionId}&reason=3x pelanggaran`
+                });
+            }).then(response => {
+                console.log('Suspend response:', response.status);
+                return response.text();
+            }).then(data => {
+                console.log('Suspend result:', data);
+                // Redirect to result page to show score
+                setTimeout(() => {
+                    window.location.href = '<?= config('app_url') ?>/exam/result/' + sessionId;
+                }, 2000);
+            }).catch(err => {
+                console.error('Error during submit/suspend:', err);
+                // Still redirect to result page even if error
+                setTimeout(() => {
+                    window.location.href = '<?= config('app_url') ?>/exam/result/' + sessionId;
+                }, 2000);
+            });
+            
+            console.log('=== SUSPEND AND SUBMIT EXAM END ===');
+        }
+        
+        // Show violation warning
+        function showViolationWarning(message) {
+            const warning = document.getElementById('mobile-warning');
+            warning.textContent = message;
+            warning.style.display = 'block';
+        }
+        
+        // Hide violation warning
+        function hideViolationWarning() {
+            const warning = document.getElementById('mobile-warning');
+            warning.style.display = 'none';
+        }
+    </script>
+    
+    <script>
+        // Render MathJax after page load
+        window.addEventListener('load', function() {
+            if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+                MathJax.typesetPromise().catch((err) => console.log(err));
+            }
+        });
+    </script>
+
+    <script>
+        function toggleImageZoom(img) {
+            if (img.style.transform && img.style.transform !== "none") {
+                img.style.transform = "none";
+                img.style.position = "relative";
+                img.style.zIndex = "auto";
+            } else {
+                img.style.transform = "scale(1.5)";
+                img.style.position = "relative";
+                img.style.zIndex = "1000";
+            }
+        }
+        
+        // Close zoom when clicking outside
+        document.addEventListener("click", function(e) {
+            if (!e.target.matches(".question-image img")) {
+                document.querySelectorAll(".question-image img").forEach(img => {
+                    img.style.transform = "none";
+                    img.style.position = "relative";
+                    img.style.zIndex = "auto";
+                });
+            }
+        });
+    </script></body>
+</html>
