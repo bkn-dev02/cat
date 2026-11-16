@@ -310,7 +310,7 @@
     <nav class="navbar">
         <div class="container">
             <a class="navbar-brand" href="<?= config('app_url') ?>/dashboard">
-                <i class="fas fa-graduation-cap"></i> CAT Enterprise
+                <i class="fas fa-graduation-cap"></i> CAT SMA UNGGUL BINA KASIH NUSANTARA
             </a>
         </div>
     </nav>

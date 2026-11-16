@@ -82,6 +82,18 @@ if (isset($controllerMap[$controllerKey])) {
     $controller = $controllerMap[$controllerKey];
 }
 
+// Keep the existing exam monitor URLs while routing them to their own controller.
+$controllerActionMap = [
+    'exam/monitor' => ['controller' => 'MonitorController', 'method' => 'monitor'],
+    'exam/monitordata' => ['controller' => 'MonitorController', 'method' => 'monitorData'],
+    'exam/monitorviolations' => ['controller' => 'MonitorController', 'method' => 'monitorViolations'],
+];
+$actionKey = strtolower(($parts[0] ?? '') . '/' . ($method ?? ''));
+if (isset($controllerActionMap[$actionKey])) {
+    $controller = $controllerActionMap[$actionKey]['controller'];
+    $method = $controllerActionMap[$actionKey]['method'];
+}
+
 // Default method based on controller
 if ($method === null) {
     if ($controller === 'AuthController') {

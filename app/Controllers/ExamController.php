@@ -1,47 +1,55 @@
 <?php
 
 namespace App\Controllers;
+
 use Exception;
 
 class ExamController
 {
+    private const VIOLATION_LIMIT = 1;
+
     public function index()
     {
         requireAuth();
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         header('Pragma: no-cache');
-        
-        try {
+
+            try {
             $user = auth();
             $kelasUpper = strtoupper($user['kelas'] ?? '');
-    
-        // Paksa tab ppdb untuk kelas CSR atau calon-siswa
-        if (
-            ($user['role'] === 'siswa' && $kelasUpper === 'CSR') ||
-            $user['role'] === 'calon-siswa'
-        ) {
-            $activeTab = 'ppdb';
-        } else {
-            $activeTab = $_GET['tab'] ?? 'reguler';
-            if (!in_array($activeTab, ['reguler', 'ppdb'])) $activeTab = 'reguler';
-        }
 
-        // ── Deteksi kolom opsional yang mungkin belum ada di DB lama ──────
-        $hasExamType          = $this->columnExists('exams', 'exam_type');
-        $hasRandomize         = $this->columnExists('exams', 'randomize_questions');
-        $hasCategory          = $this->columnExists('exams', 'category');
-        $hasCreatedBy         = $this->columnExists('exams', 'created_by');
+            // Pagination: 24 card per halaman
+            $perPage = 24;
+            $page    = max(1, (int)($_GET['page'] ?? 1));
+            $offset  = ($page - 1) * $perPage;
 
-        $examTypeCol      = $hasExamType    ? "e.exam_type"          : "'single' as exam_type";
-        $randomizeCol     = $hasRandomize   ? "e.randomize_questions" : "0 as randomize_questions";
-        $categoryWhere    = $hasCategory    ? "AND e.category = ?"    : "";
-        $categoryOrder    = $hasCreatedBy   ? "AND e.created_by = ?"  : "";
+            // Paksa tab ppdb untuk kelas CSR atau calon-siswa
+            if (
+                ($user['role'] === 'siswa' && $kelasUpper === 'CSR') ||
+                $user['role'] === 'calon-siswa'
+            ) {
+                $activeTab = 'ppdb';
+            } else {
+                $activeTab = $_GET['tab'] ?? 'reguler';
+                if (!in_array($activeTab, ['reguler', 'ppdb'])) $activeTab = 'reguler';
+            }
 
-        // ── Siswa & Calon-Siswa ──────────────────────────────────────────
-        if ($user['role'] === 'siswa' || $user['role'] === 'calon-siswa') {
+            // ── Deteksi kolom opsional yang mungkin belum ada di DB lama ──────
+            $hasExamType          = $this->columnExists('exams', 'exam_type');
+            $hasRandomize         = $this->columnExists('exams', 'randomize_questions');
+            $hasCategory          = $this->columnExists('exams', 'category');
+            $hasCreatedBy         = $this->columnExists('exams', 'created_by');
 
-            if ($user['role'] === 'calon-siswa') {
-                $sql = "
+            $examTypeCol      = $hasExamType    ? "e.exam_type"          : "'single' as exam_type";
+            $randomizeCol     = $hasRandomize   ? "e.randomize_questions" : "0 as randomize_questions";
+            $categoryWhere    = $hasCategory    ? "AND e.category = ?"    : "";
+            $categoryOrder    = $hasCreatedBy   ? "AND e.created_by = ?"  : "";
+
+            // ── Siswa & Calon-Siswa ──────────────────────────────────────────
+            if ($user['role'] === 'siswa' || $user['role'] === 'calon-siswa') {
+
+                if ($user['role'] === 'calon-siswa') {
+                    $sql = "
                     SELECT e.id, e.title, e.duration, e.start_time, e.end_time, e.status,
                            {$examTypeCol}, {$randomizeCol},
                            s.name as subject_name,
@@ -66,13 +74,12 @@ class ExamController
                     {$categoryWhere}
                     ORDER BY e.start_time ASC
                 ";
-                $params = $hasCategory ? [$user['id'], $activeTab] : [$user['id']];
-                $stmt = db()->prepare($sql);
-                $stmt->execute($params);
-
-            } else {
-                $kelasUser = $user['kelas'] ?? '';
-                $sql = "
+                    $params = $hasCategory ? [$user['id'], $activeTab] : [$user['id']];
+                    $stmt = db()->prepare($sql);
+                    $stmt->execute($params);
+                } else {
+                    $kelasUser = $user['kelas'] ?? '';
+                    $sql = "
                     SELECT e.id, e.title, e.duration, e.start_time, e.end_time, e.status,
                            {$examTypeCol}, {$randomizeCol},
                            s.name as subject_name,
@@ -107,22 +114,25 @@ class ExamController
                     {$categoryWhere}
                     ORDER BY e.start_time ASC
                 ";
-                $params = [$kelasUser, $kelasUser, $user['id'], $user['id']];
-                if ($hasCategory) $params[] = $activeTab;
-                $stmt = db()->prepare($sql);
-                $stmt->execute($params);
-            }
-
-            $allExams = $stmt->fetchAll();
-            $exams = [];
-            foreach ($allExams as $exam) {
-                if ($user['role'] === 'calon-siswa' || $exam['can_access']) {
-                    $exams[] = $exam;
+                    $params = [$kelasUser, $kelasUser, $user['id'], $user['id']];
+                    if ($hasCategory) $params[] = $activeTab;
+                    $stmt = db()->prepare($sql);
+                    $stmt->execute($params);
                 }
-            }
 
-        } elseif ($user['role'] === 'admin') {
-            $sql = "
+                $allExams = $stmt->fetchAll();
+                $exams = [];
+                foreach ($allExams as $exam) {
+                    if ($user['role'] === 'calon-siswa' || $exam['can_access']) {
+                        $exams[] = $exam;
+                    }
+                }
+
+                // Pagination untuk siswa (filter can_access dilakukan di PHP)
+                $totalExams = count($exams);
+                $exams = array_slice($exams, $offset, $perPage);
+            } elseif ($user['role'] === 'admin') {
+                $sql = "
                 SELECT e.id, e.title, e.duration, e.start_time, e.end_time, e.status,
                        e.exam_pdf,
                        {$examTypeCol}, {$randomizeCol},
@@ -133,19 +143,30 @@ class ExamController
                            WHEN NOW() BETWEEN e.start_time AND e.end_time THEN 'active'
                            ELSE 'ended'
                        END as exam_status
-                FROM exams e
-                LEFT JOIN subjects s ON e.subject_id = s.id
-                " . ($hasCreatedBy ? "LEFT JOIN users u ON e.created_by = u.id" : "") . "
-                " . ($hasCategory ? "WHERE e.category = ?" : "") . "
-                ORDER BY e.created_at DESC
-            ";
-            $params = $hasCategory ? [$activeTab] : [];
-            $stmt = db()->prepare($sql);
-            $stmt->execute($params);
-            $exams = $stmt->fetchAll();
-        } else {
-            // Guru
-            $sql = "
+               FROM exams e
+               LEFT JOIN subjects s ON e.subject_id = s.id
+               " . ($hasCreatedBy ? "LEFT JOIN users u ON e.created_by = u.id" : "") . "
+               " . ($hasCategory ? "WHERE e.category = ?" : "") . "
+               ORDER BY e.created_at DESC
+           ";
+           $params = $hasCategory ? [$activeTab] : [];
+
+           // Hitung total untuk pagination
+           $countSql = "SELECT COUNT(*) FROM exams e LEFT JOIN subjects s ON e.subject_id = s.id " . ($hasCategory ? "WHERE e.category = ?" : "");
+           $stmtCount = db()->prepare($countSql);
+           $stmtCount->execute($params);
+           $totalExams = (int)$stmtCount->fetchColumn();
+
+           // Tambah LIMIT/OFFSET
+           $sql .= " LIMIT ? OFFSET ?";
+           $params[] = $perPage;
+           $params[] = $offset;
+           $stmt = db()->prepare($sql);
+           $stmt->execute($params);
+           $exams = $stmt->fetchAll();
+            } else {
+                // Guru
+                $sql = "
                 SELECT e.id, e.title, e.duration, e.start_time, e.end_time, e.status,
                        e.exam_pdf,
                        {$examTypeCol}, {$randomizeCol},
@@ -155,25 +176,36 @@ class ExamController
                            WHEN NOW() BETWEEN e.start_time AND e.end_time THEN 'active'
                            ELSE 'ended'
                        END as exam_status
-                FROM exams e
-                LEFT JOIN subjects s ON e.subject_id = s.id
-                WHERE 1=1
-                " . ($hasCategory  ? "AND e.category = ?"   : "") . "
-                " . ($hasCreatedBy ? "AND e.created_by = ?" : "") . "
-                ORDER BY e.created_at DESC
-            ";
-            $params = [];
-            if ($hasCategory)  $params[] = $activeTab;
-            if ($hasCreatedBy) $params[] = $user['id'];
-            $stmt = db()->prepare($sql);
-            $stmt->execute($params);
-            $exams = $stmt->fetchAll();
-        }
+               FROM exams e
+               LEFT JOIN subjects s ON e.subject_id = s.id
+               WHERE 1=1
+               " . ($hasCategory  ? "AND e.category = ?"   : "") . "
+               " . ($hasCreatedBy ? "AND e.created_by = ?" : "") . "
+               ORDER BY e.created_at DESC
+           ";
+           $params = [];
+           if ($hasCategory)  $params[] = $activeTab;
+           if ($hasCreatedBy) $params[] = $user['id'];
 
-        if ($user['role'] !== 'siswa' && $exams) {
-            $examIds = array_column($exams, 'id');
-            $placeholders = implode(',', array_fill(0, count($examIds), '?'));
-            $stmt = db()->prepare("
+           // Hitung total untuk pagination
+           $countSql = "SELECT COUNT(*) FROM exams e LEFT JOIN subjects s ON e.subject_id = s.id WHERE 1=1 " . ($hasCategory ? "AND e.category = ?" : "") . ($hasCreatedBy ? "AND e.created_by = ?" : "");
+           $stmtCount = db()->prepare($countSql);
+           $stmtCount->execute($params);
+           $totalExams = (int)$stmtCount->fetchColumn();
+
+           // Tambah LIMIT/OFFSET
+           $sql .= " LIMIT ? OFFSET ?";
+           $params[] = $perPage;
+           $params[] = $offset;
+           $stmt = db()->prepare($sql);
+           $stmt->execute($params);
+           $exams = $stmt->fetchAll();
+            }
+
+            if ($user['role'] !== 'siswa' && $exams) {
+                $examIds = array_column($exams, 'id');
+                $placeholders = implode(',', array_fill(0, count($examIds), '?'));
+                $stmt = db()->prepare("
                 SELECT
                     ep.exam_id,
                     COUNT(DISTINCT u.kelas) AS class_count,
@@ -184,25 +216,31 @@ class ExamController
                   AND u.role = 'siswa'
                 GROUP BY ep.exam_id
             ");
-            $stmt->execute($examIds);
-            $participantInfoByExam = [];
-            foreach ($stmt->fetchAll() as $participantInfo) {
-                $participantInfoByExam[$participantInfo['exam_id']] = $participantInfo;
+                $stmt->execute($examIds);
+                $participantInfoByExam = [];
+                foreach ($stmt->fetchAll() as $participantInfo) {
+                    $participantInfoByExam[$participantInfo['exam_id']] = $participantInfo;
+                }
+
+                foreach ($exams as &$exam) {
+                    $exam['participant_class_count'] = (int)($participantInfoByExam[$exam['id']]['class_count'] ?? 0);
+                    $exam['participant_classes'] = $participantInfoByExam[$exam['id']]['classes'] ?? '';
+                }
+                unset($exam);
             }
 
-            foreach ($exams as &$exam) {
-                $exam['participant_class_count'] = (int)($participantInfoByExam[$exam['id']]['class_count'] ?? 0);
-                $exam['participant_classes'] = $participantInfoByExam[$exam['id']]['classes'] ?? '';
-            }
-            unset($exam);
-        }
+            $totalPages = max(1, (int)ceil($totalExams / $perPage));
+            $page       = min($page, $totalPages);
 
-        view('exams/index', [
-            'exams'     => $exams,
-            'user'      => $user,
-            'activeTab' => $activeTab,
-        ]);
-
+            view('exams/index', [
+                'exams'     => $exams,
+                'user'      => $user,
+                'activeTab' => $activeTab,
+                'page'      => $page,
+                'totalPages'=> $totalPages,
+                'perPage'   => $perPage,
+                'totalExams'=> $totalExams,
+            ]);
         } catch (\Exception $e) {
             error_log('[ExamController::index] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             $errMsg = htmlspecialchars($e->getMessage());
@@ -239,71 +277,72 @@ class ExamController
         }
         return $cache[$key];
     }
+
     public function uploadPdf()
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-    
+
         header('Content-Type: application/json');
-    
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'message' => 'Invalid request method']);
             return;
         }
-    
+
         $examId = $_POST['exam_id'] ?? null;
-    
+
         if (!$examId) {
             echo json_encode(['success' => false, 'message' => 'Exam ID tidak valid']);
             return;
         }
-    
+
         if (!isset($_FILES['exam_pdf']) || $_FILES['exam_pdf']['error'] !== UPLOAD_ERR_OK) {
             echo json_encode(['success' => false, 'message' => 'File PDF tidak ditemukan atau gagal diupload']);
             return;
         }
-    
+
         $file = $_FILES['exam_pdf'];
-    
+
         // Validate file type
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if ($ext !== 'pdf') {
             echo json_encode(['success' => false, 'message' => 'File harus berformat PDF']);
             return;
         }
-    
+
         // Validate size (max 10MB)
         $maxSize = 10 * 1024 * 1024;
         if ($file['size'] > $maxSize) {
             echo json_encode(['success' => false, 'message' => 'Ukuran file maksimal 10MB']);
             return;
         }
-    
+
         try {
             // Verify exam exists
             $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
             $stmt->execute([$examId]);
             $exam = $stmt->fetch();
-    
+
             if (!$exam) {
                 echo json_encode(['success' => false, 'message' => 'Ujian tidak ditemukan']);
                 return;
             }
-    
+
             // FIX: path langsung ke uploads/exams (tanpa folder "public")
             $uploadDir = __DIR__ . '/../../uploads/exams/';
             if (!is_dir($uploadDir)) {
                 mkdir($uploadDir, 0755, true);
             }
-    
+
             $filename = 'exam_' . $examId . '_' . time() . '.pdf';
             $destination = $uploadDir . $filename;
-    
+
             if (!move_uploaded_file($file['tmp_name'], $destination)) {
                 echo json_encode(['success' => false, 'message' => 'Gagal menyimpan file ke ' . $destination]);
                 return;
             }
-    
+
             // Delete old PDF if exists
             if (!empty($exam['exam_pdf'])) {
                 $oldPath = $uploadDir . $exam['exam_pdf'];
@@ -311,69 +350,67 @@ class ExamController
                     unlink($oldPath);
                 }
             }
-    
+
             // Update exam record
             $stmt = db()->prepare("UPDATE exams SET exam_pdf = ? WHERE id = ?");
             $stmt->execute([$filename, $examId]);
-    
+
             echo json_encode(['success' => true, 'message' => 'PDF berhasil diupload']);
-    
         } catch (\Exception $e) {
             error_log("UploadPdf error: " . $e->getMessage());
             echo json_encode(['success' => false, 'message' => 'Gagal mengupload PDF: ' . $e->getMessage()]);
         }
     }
+
     public function deletePdf($examId)
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-    
+
         header('Content-Type: application/json');
-    
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'message' => 'Invalid request method']);
             return;
         }
-    
+
         try {
             $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
             $stmt->execute([$examId]);
             $exam = $stmt->fetch();
-    
+
             if (!$exam) {
                 echo json_encode(['success' => false, 'message' => 'Ujian tidak ditemukan']);
                 return;
             }
-    
+
             if (empty($exam['exam_pdf'])) {
                 echo json_encode(['success' => false, 'message' => 'Tidak ada PDF untuk dihapus']);
                 return;
             }
-    
+
             $uploadDir = __DIR__ . '/../../uploads/exams/';
             $filePath  = $uploadDir . $exam['exam_pdf'];
-    
+
             if (file_exists($filePath)) {
                 unlink($filePath);
             }
-    
+
             $stmt = db()->prepare("UPDATE exams SET exam_pdf = NULL WHERE id = ?");
             $stmt->execute([$examId]);
-    
+
             echo json_encode(['success' => true, 'message' => 'PDF berhasil dihapus']);
-    
         } catch (\Exception $e) {
             error_log("DeletePdf error: " . $e->getMessage());
             echo json_encode(['success' => false, 'message' => 'Gagal menghapus PDF: ' . $e->getMessage()]);
         }
     }
-    
 
     public function create()
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-        
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $title              = $_POST['title']           ?? '';
             $subjectId          = $_POST['subject_id']      ?? '';
@@ -385,7 +422,7 @@ class ExamController
             $category           = in_array($_POST['category'] ?? '', ['reguler', 'ppdb']) ? $_POST['category'] : 'reguler';
             $participantType    = $_POST['participant_type'] ?? 'all';
             $selectedClasses    = $_POST['selected_classes'] ?? [];
-            
+
             if (empty($title) || empty($duration) || empty($startTime) || empty($endTime)) {
                 $_SESSION['error'] = 'Semua field wajib diisi';
             } elseif ($participantType === 'class' && empty($selectedClasses)) {
@@ -393,12 +430,12 @@ class ExamController
             } else {
                 try {
                     $user = auth();
-                    
+
                     db()->beginTransaction();
 
                     // Generate unique token
                     $token = 'EXAM-' . strtoupper(substr(md5(uniqid() . time()), 0, 10));
-                    
+
                     $stmt = db()->prepare("
                         INSERT INTO exams (title, category, subject_id, duration, start_time, end_time, token, randomize_questions, exam_type, status, created_by, created_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, NOW())
@@ -436,32 +473,34 @@ class ExamController
                 }
             }
         }
-        
+
         // Get subjects
         $stmt = db()->prepare("SELECT * FROM subjects ORDER BY name");
         $stmt->execute();
         $subjects = $stmt->fetchAll();
-        
+
         view('exams/create', ['subjects' => $subjects]);
     }
-    public function previewQuestions() {
+
+    public function previewQuestions()
+    {
         header('Content-Type: application/json');
-        
+
         requireAuth();
         requireRole(['admin', 'guru']);
-        
+
         $user = auth();
-        
+
         // Ambil examId dari URL
         $uri = $_SERVER['REQUEST_URI'];
         $parts = explode('/', trim(parse_url($uri, PHP_URL_PATH), '/'));
         $examId = (int) end($parts);
-        
+
         if (!$examId) {
             echo json_encode(['success' => false, 'message' => 'ID tidak valid']);
             return;
         }
-    
+
         try {
             $stmt = db()->prepare("
                 SELECT eq.*, q.*, s.name as subject_name
@@ -473,25 +512,26 @@ class ExamController
             ");
             $stmt->execute([$examId]);
             $questions = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-    
+
             echo json_encode(['success' => true, 'questions' => $questions]);
         } catch (\Exception $e) {
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
         }
     }
+
     public function start($examId)
     {
         try {
             requireAuth();
             requireRole(['siswa']);
-            
+
             $user = auth();
-            
+
             // Get exam
             $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
             $stmt->execute([$examId]);
             $exam = $stmt->fetch();
-            
+
             if (!$exam) {
                 $_SESSION['error'] = 'Ujian tidak ditemukan';
                 redirect('exam');
@@ -569,7 +609,7 @@ class ExamController
                     }
                 }
             }
-            
+
             // Check if already have session yang masih active (bukan submitted/completed)
             $stmt = db()->prepare("
                 SELECT * FROM exam_sessions 
@@ -595,28 +635,18 @@ class ExamController
                 redirect('exam');
                 return;
             }
-            
+
             if (!$session) {
                 // Generate unique session token
                 $sessionToken = bin2hex(random_bytes(32));
-                
-                // Calculate remaining time based on exam start time
-                $now = time();
-                $examStart = strtotime($exam['start_time']);
-                $examEnd = strtotime($exam['end_time']);
+
+                // Individual exam duration only — not capped by global access window end time
                 $examDuration = $exam['duration'] * 60; // in seconds
-                
-                // Calculate how much time has passed since exam started
-                $elapsedTime = max(0, $now - $examStart);
-                
-                // Calculate remaining time (cannot exceed exam duration or end time)
-                $timeUntilEnd = max(0, $examEnd - $now);
-                $remainingTime = min($examDuration - $elapsedTime, $timeUntilEnd);
-                
+
                 // Ensure remaining time is not negative
-                $remainingTime = max(0, $remainingTime);
-                
-                // Create new session with calculated remaining time
+                $remainingTime = max(0, $examDuration);
+
+                // Create new session with full individual duration
                 $stmt = db()->prepare("
                     INSERT INTO exam_sessions (exam_id, user_id, remaining_time, session_token, token_status, status, started_at)
                     VALUES (?, ?, ?, ?, 'active', 'active', NOW())
@@ -625,31 +655,30 @@ class ExamController
                 $sessionId = db()->lastInsertId();
             } else {
                 $sessionId = $session['id'];
-                
-                // Hitung ulang remaining_time jika 0 atau negatif
-                if ($session['remaining_time'] <= 0) {
+
+                // Jika sesi sedang suspended, validasi global access window sebelum resume
+                if ($session['status'] === 'suspended') {
                     $now = time();
                     $examEnd = strtotime($exam['end_time']);
-                    $examDuration = $exam['duration'] * 60;
-                    $elapsedTime = max(0, $now - strtotime($exam['start_time']));
-                    $timeUntilEnd = max(0, $examEnd - $now);
-                    $newRemaining = max(60, min($examDuration - $elapsedTime, $timeUntilEnd));
-                    
-                    $stmt = db()->prepare("UPDATE exam_sessions SET remaining_time = ? WHERE id = ?");
-                    $stmt->execute([$newRemaining, $session['id']]);
+                    if ($now > $examEnd) {
+                        $_SESSION['error'] = 'Waktu akses ujian sudah berakhir. Tidak dapat melanjutkan ujian.';
+                        redirect('exam');
+                        return;
+                    }
                 }
-                
-                // Update to active
+
+                // Pertahankan remaining_time (durasi individual), jangan hitung ulang berdasarkan end_time
+                // Catat waktu resume aktual sebagai awal akumulasi aktif berikutnya
                 $stmt = db()->prepare("
                     UPDATE exam_sessions 
-                    SET started_at = COALESCE(started_at, NOW()), status = 'active', token_status = 'active'
+                    SET started_at = NOW(), status = 'active', token_status = 'active'
                     WHERE id = ?
                 ");
+
                 $stmt->execute([$sessionId]);
             }
-            
+
             redirect('exam/take/' . $sessionId);
-            
         } catch (Exception $e) {
             error_log("Start exam error: " . $e->getMessage());
             $_SESSION['error'] = 'Terjadi kesalahan saat memulai ujian. Silakan coba lagi.';
@@ -661,12 +690,11 @@ class ExamController
     {
         requireAuth();
 
-        // Get session with exam info - dengan COALESCE untuk kolom opsional
-        // agar tidak crash jika kolom belum ada di DB production
         $stmt = db()->prepare("
             SELECT es.*,
                    e.title,
                    e.duration,
+                   e.end_time,
                    e.subject_id,
                    COALESCE(e.randomize_questions, 0) as randomize_questions,
                    COALESCE(e.exam_type, 'single') as exam_type,
@@ -711,17 +739,32 @@ class ExamController
             return;
         }
 
+        // Validasi global access window untuk sesi suspended: resume ditolak jika window sudah tutup
+        if ($session['status'] === 'suspended') {
+            $now = time();
+            $examEnd = strtotime($session['end_time']);
+            if ($now > $examEnd) {
+                $_SESSION['error'] = 'Waktu akses ujian sudah berakhir. Tidak dapat melanjutkan ujian.';
+                redirect('exam');
+                return;
+            }
+            // Sesi suspended: siswa tidak dapat mengerjakan sampai admin melakukan reset suspend
+            $_SESSION['error'] = 'Sesi ujian ditangguhkan. Silakan tunggu admin melakukan reset suspend sebelum melanjutkan.';
+            redirect('exam');
+            return;
+        }
+
         // Jika status active/in_progress, SELALU tampilkan soal — jangan redirect ke result
 
-        // Activate session if needed
-        if (!in_array($session['status'], ['active', 'in_progress', 'suspended'], true)) {
+        // Activate session if needed — jangan mereset sesi yang sudah submit/completed
+        if (!in_array($session['status'], ['active', 'in_progress', 'suspended', 'submitted', 'completed'], true)) {
             $stmt = db()->prepare("
                 UPDATE exam_sessions 
                 SET status = 'active', token_status = 'active', started_at = COALESCE(started_at, NOW())
                 WHERE id = ?
             ");
             $stmt->execute([$sessionId]);
-            
+
             // Update local session data
             $session['status'] = 'active';
             $session['token_status'] = 'active';
@@ -788,20 +831,10 @@ class ExamController
             $answers[$row['question_id']] = $row['answer'];
         }
 
-        $stmtSuspensions = db()->prepare("
-            SELECT COUNT(*)
-            FROM exam_violations
-            WHERE session_id = ?
-              AND reason LIKE 'Auto-suspend event:% - Keluar fullscreen atau kehilangan fokus'
-        ");
-        $stmtSuspensions->execute([$sessionId]);
-        $suspensionCount = (int)$stmtSuspensions->fetchColumn();
-
         view('exams/take', [
             'session' => $session,
             'questions' => $questions,
             'answers' => $answers,
-            'suspensionCount' => $suspensionCount,
             'isSuspended' => $session['status'] === 'suspended'
         ]);
     }
@@ -809,25 +842,25 @@ class ExamController
     public function saveAnswer()
     {
         requireAuth();
-        
+
         // Set longer timeout for save operations
         set_time_limit(30);
-        
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);
             echo json_encode(['success' => false, 'message' => 'Method not allowed']);
             return;
         }
-        
+
         $sessionId  = $_POST['session_id'] ?? '';
         $questionId = $_POST['question_id'] ?? '';
         $answer = isset($_POST['answer']) ? $_POST['answer'] : '';
-        
+
         if (empty($sessionId) || empty($questionId)) {
             echo json_encode(['success' => false, 'message' => 'Data tidak lengkap']);
             return;
         }
-        
+
         try {
             // Verify session belongs to current user AND is still active
             $user = auth();
@@ -844,17 +877,17 @@ class ExamController
                 return;
             }
 
-            // Tolak jika session sudah selesai
-            if ($session['submitted_at'] !== null || in_array($session['status'], ['submitted', 'completed'], true)) {
-                echo json_encode(['success' => false, 'message' => 'Ujian sudah dikumpulkan, jawaban tidak dapat diubah']);
+            // Tolak jika session sudah selesai atau suspended
+            if ($session['submitted_at'] !== null || in_array($session['status'], ['submitted', 'completed', 'suspended'], true)) {
+                echo json_encode(['success' => false, 'message' => 'Ujian sudah dikumpulkan atau ditangguhkan, jawaban tidak dapat diubah']);
                 return;
             }
-            
+
             // Check if answer exists
             $stmt = db()->prepare("SELECT id FROM answers WHERE session_id = ? AND question_id = ?");
             $stmt->execute([$sessionId, $questionId]);
             $existing = $stmt->fetch();
-            
+
             if ($existing) {
                 // Update existing answer
                 $stmt = db()->prepare("UPDATE answers SET answer = ?, updated_at = NOW() WHERE session_id = ? AND question_id = ?");
@@ -864,7 +897,7 @@ class ExamController
                 $stmt = db()->prepare("INSERT INTO answers (session_id, question_id, answer, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())");
                 $stmt->execute([$sessionId, $questionId, $answer]);
             }
-            
+
             echo json_encode(['success' => true, 'message' => 'Jawaban tersimpan']);
         } catch (Exception $e) {
             error_log("SaveAnswer Error: " . $e->getMessage());
@@ -943,7 +976,7 @@ class ExamController
                 return;
             }
 
-            if (!in_array($session['status'], ['active', 'in_progress', 'suspended'], true) || $session['submitted_at'] !== null) {
+            if (!in_array($session['status'], ['active', 'in_progress'], true) || $session['submitted_at'] !== null) {
                 $pdo->rollBack();
                 http_response_code(409);
                 echo json_encode([
@@ -1016,7 +1049,8 @@ class ExamController
             }
 
             if ($insertValues) {
-                $stmtInsert = $pdo->prepare("
+                $stmtInsert = $pdo->prepare(
+                    "
                     INSERT INTO answers (session_id, question_id, answer, created_at, updated_at)
                     VALUES " . implode(',', $insertValues)
                 );
@@ -1041,38 +1075,54 @@ class ExamController
     public function saveTime()
     {
         requireAuth();
-        
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);
             echo json_encode(['success' => false, 'message' => 'Method not allowed']);
             return;
         }
-        
+
         // Get JSON input
         $input = json_decode(file_get_contents('php://input'), true);
         $sessionId = $input['session_id'] ?? '';
         $remainingTime = $input['remaining_time'] ?? 0;
-        
+
         if (empty($sessionId)) {
             echo json_encode(['success' => false, 'message' => 'Session ID tidak valid']);
             return;
         }
-        
+
         try {
-            // Verify session belongs to current user
+            // Verify session belongs to current user and get current server state
             $user = auth();
-            $stmt = db()->prepare("SELECT id FROM exam_sessions WHERE id = ? AND user_id = ?");
+            $stmt = db()->prepare("
+                SELECT id, remaining_time, status, started_at 
+                FROM exam_sessions 
+                WHERE id = ? AND user_id = ?
+            ");
             $stmt->execute([$sessionId, $user['id']]);
-            if (!$stmt->fetch()) {
+            $session = $stmt->fetch();
+            if (!$session) {
                 echo json_encode(['success' => false, 'message' => 'Session tidak valid']);
                 return;
             }
-            
+
+            // Hitung sisa waktu yang diharapkan dari server (bukan dari klien)
+            $savedRemaining = (int)$session['remaining_time'];
+            $startedAt    = $session['started_at'] ? strtotime($session['started_at']) : time();
+            $now          = time();
+            $elapsed      = ($session['status'] === 'active') ? max(0, $now - $startedAt) : 0;
+            $expectedRemaining = max(0, $savedRemaining - $elapsed);
+
+            // Terima nilai klien hanya jika tidak melebihi harapan server (mencegah penambahan waktu ilegal)
+            $clientRemaining = (int)$remainingTime;
+            $finalRemaining  = min($clientRemaining, $expectedRemaining);
+
             // Update remaining time
             $stmt = db()->prepare("UPDATE exam_sessions SET remaining_time = ? WHERE id = ?");
-            $stmt->execute([$remainingTime, $sessionId]);
-            
-            echo json_encode(['success' => true, 'message' => 'Waktu tersimpan']);
+            $stmt->execute([$finalRemaining, $sessionId]);
+
+            echo json_encode(['success' => true, 'message' => 'Waktu tersimpan', 'remaining_time' => $finalRemaining]);
         } catch (Exception $e) {
             error_log("SaveTime Error: " . $e->getMessage());
             echo json_encode(['success' => false, 'message' => 'Gagal menyimpan waktu: ' . $e->getMessage()]);
@@ -1082,187 +1132,190 @@ class ExamController
     public function submit($sessionId = null)
     {
         requireAuth();
-    
-    try {
-        set_time_limit(30);
-        
-        // Get session ID from parameter or POST data
-        if ($sessionId === null) {
-            $sessionId = $_POST['session_id'] ?? null;
-        }
-        
-        if (!$sessionId) {
-            error_log("Submit error: No session ID provided");
-            
-            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-                header('Content-Type: application/json');
-                echo json_encode(['success' => false, 'message' => 'Session ID tidak ditemukan']);
+
+        try {
+            set_time_limit(30);
+
+            // Get session ID from parameter or POST data
+            if ($sessionId === null) {
+                $sessionId = $_POST['session_id'] ?? null;
+            }
+
+            if (!$sessionId) {
+                error_log("Submit error: No session ID provided");
+
+                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'message' => 'Session ID tidak ditemukan']);
+                    return;
+                }
+
+                $_SESSION['error'] = 'Session ID tidak ditemukan';
+                redirect('dashboard');
                 return;
             }
-            
-            $_SESSION['error'] = 'Session ID tidak ditemukan';
-            redirect('dashboard');
-            return;
-        }
-        
-        // Get session info
-        $stmt = db()->prepare("
+
+            // Get session info
+            $stmt = db()->prepare("
             SELECT es.*, e.id as exam_id, e.title
             FROM exam_sessions es
             JOIN exams e ON es.exam_id = e.id
             WHERE es.id = ? AND es.user_id = ?
         ");
-        $stmt->execute([$sessionId, auth()['id']]);
-        $session = $stmt->fetch();
-        
-        if (!$session) {
-            error_log("Submit error: Session not found - ID: $sessionId, User: " . auth()['id']);
-            
-            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-                header('Content-Type: application/json');
-                echo json_encode(['success' => false, 'message' => 'Session ujian tidak ditemukan']);
+            $stmt->execute([$sessionId, auth()['id']]);
+            $session = $stmt->fetch();
+
+            if (!$session) {
+                error_log("Submit error: Session not found - ID: $sessionId, User: " . auth()['id']);
+
+                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'message' => 'Session ujian tidak ditemukan']);
+                    return;
+                }
+
+                $_SESSION['error'] = 'Session ujian tidak ditemukan';
+                redirect('dashboard');
                 return;
             }
-            
-            $_SESSION['error'] = 'Session ujian tidak ditemukan';
-            redirect('dashboard');
-            return;
-        }
-        
-        $pdo = db();
-        $pdo->beginTransaction();
 
-        // Lock the session row to prevent concurrent submits
-        $stmtLock = $pdo->prepare("
+            $pdo = db();
+            $pdo->beginTransaction();
+
+            // Lock the session row to prevent concurrent submits
+            $stmtLock = $pdo->prepare("
             SELECT id, status, submitted_at, exam_id
             FROM exam_sessions
             WHERE id = ? AND user_id = ?
             FOR UPDATE
         ");
-        $stmtLock->execute([$sessionId, auth()['id']]);
-        $lockedSession = $stmtLock->fetch();
+            $stmtLock->execute([$sessionId, auth()['id']]);
+            $lockedSession = $stmtLock->fetch();
 
-        if (!$lockedSession) {
-            $pdo->rollBack();
-            throw new \Exception("Session tidak ditemukan");
-        }
+            if (!$lockedSession) {
+                $pdo->rollBack();
+                throw new \Exception("Session tidak ditemukan");
+            }
 
-        // Guard: jika sudah submitted, jangan proses lagi
-        if ($lockedSession['submitted_at'] !== null || in_array($lockedSession['status'], ['submitted', 'completed'], true)) {
-            $pdo->rollBack();
-            error_log("Submit skipped (already submitted) - Session: $sessionId");
+            // Guard: jika sudah submitted, jangan proses lagi
+            if ($lockedSession['submitted_at'] !== null || in_array($lockedSession['status'], ['submitted', 'completed'], true)) {
+                $pdo->rollBack();
+                error_log("Submit skipped (already submitted) - Session: $sessionId");
 
-            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-                header('Content-Type: application/json');
-                echo json_encode(['success' => true, 'message' => 'Ujian sudah dikumpulkan sebelumnya', 'session_id' => $sessionId]);
+                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => true, 'message' => 'Ujian sudah dikumpulkan sebelumnya', 'session_id' => $sessionId]);
+                    return;
+                }
+                redirect('exam/result/' . $sessionId . '?t=' . time());
                 return;
             }
-            redirect('exam/result/' . $sessionId . '?t=' . time());
-            return;
-        }
 
-        // Get all answers with correct answers, points, AND type
-        $stmt = $pdo->prepare("
+            // Get all answers with correct answers, points, AND type
+            $stmt = $pdo->prepare("
             SELECT a.*, q.correct_answer, q.points, q.type, q.option_scores
             FROM answers a
             JOIN questions q ON a.question_id = q.id
             WHERE a.session_id = ?
         ");
-        $stmt->execute([$sessionId]);
-        $answers = $stmt->fetchAll();
-        
-        $totalScore = 0;
-        $correctCount = 0;
-        foreach ($answers as $answer) {
-            $score = $this->getAnswerScore(
-                $answer['type'], $answer['answer'], $answer['correct_answer'],
-                $answer['points'], $answer['option_scores']
-            );
-            $totalScore += $score;
-            if ($score > 0) $correctCount++;
-        }
-        
-        error_log("Submit calculation - Session: $sessionId, Total answers: " . count($answers) . ", Correct: $correctCount, Score: $totalScore");
-        
-        // Update session with score — only if not yet submitted (double-guard)
-        $stmt = $pdo->prepare("
+            $stmt->execute([$sessionId]);
+            $answers = $stmt->fetchAll();
+
+            $totalScore = 0;
+            $correctCount = 0;
+            foreach ($answers as $answer) {
+                $score = $this->getAnswerScore(
+                    $answer['type'],
+                    $answer['answer'],
+                    $answer['correct_answer'],
+                    $answer['points'],
+                    $answer['option_scores']
+                );
+                $totalScore += $score;
+                if ($score > 0) $correctCount++;
+            }
+
+            error_log("Submit calculation - Session: $sessionId, Total answers: " . count($answers) . ", Correct: $correctCount, Score: $totalScore");
+
+            // Update session with score — only if not yet submitted (double-guard)
+            $stmt = $pdo->prepare("
             UPDATE exam_sessions 
             SET status = 'submitted', 
                 submitted_at = NOW(), 
                 score = ?, 
-                is_best_score = 1 
+                is_best_score = 1,
+                remaining_time = 0
             WHERE id = ? AND submitted_at IS NULL
         ");
-        $result = $stmt->execute([$totalScore, $sessionId]);
-        
-        if ($stmt->rowCount() === 0) {
-            // Another concurrent request already submitted this session
-            $pdo->rollBack();
-            error_log("Submit skipped (concurrent submit) - Session: $sessionId");
+            $result = $stmt->execute([$totalScore, $sessionId]);
 
-            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-                header('Content-Type: application/json');
-                echo json_encode(['success' => true, 'message' => 'Ujian sudah dikumpulkan', 'session_id' => $sessionId]);
+            if ($stmt->rowCount() === 0) {
+                // Another concurrent request already submitted this session
+                $pdo->rollBack();
+                error_log("Submit skipped (concurrent submit) - Session: $sessionId");
+
+                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => true, 'message' => 'Ujian sudah dikumpulkan', 'session_id' => $sessionId]);
+                    return;
+                }
+                redirect('exam/result/' . $sessionId . '?t=' . time());
                 return;
             }
-            redirect('exam/result/' . $sessionId . '?t=' . time());
-            return;
-        }
-        
-        error_log("Submit success - Session: $sessionId updated with score: $totalScore");
-        
-        // Mark other submissions from same user-exam as not best
-        $stmt = $pdo->prepare("
+
+            error_log("Submit success - Session: $sessionId updated with score: $totalScore");
+
+            // Mark other submissions from same user-exam as not best
+            $stmt = $pdo->prepare("
             UPDATE exam_sessions 
             SET is_best_score = 0 
             WHERE user_id = ? AND exam_id = ? AND id != ? 
             AND status IN ('submitted', 'graded', 'completed')
         ");
-        $stmt->execute([auth()['id'], $session['exam_id'], $sessionId]);
+            $stmt->execute([auth()['id'], $session['exam_id'], $sessionId]);
 
-        $pdo->commit();
-        
-        // If AJAX request, return JSON
-        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-            header('Content-Type: application/json');
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Ujian berhasil dikumpulkan',
-                'score' => $totalScore,
-                'session_id' => $sessionId
-            ]);
-            return;
-        }
-        
-        $_SESSION['success'] = 'Ujian berhasil dikumpulkan!';
-        redirect('exam/result/' . $sessionId . '?t=' . time());
-        
-    } catch (\Exception $e) {
-        if (isset($pdo) && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        error_log("Submit error: " . $e->getMessage() . " - Session: " . ($sessionId ?? 'unknown'));
-        
-        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
-            header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => 'Gagal mengumpulkan ujian: ' . $e->getMessage()]);
-            return;
-        }
-        
-        $_SESSION['error'] = 'Gagal mengumpulkan ujian: ' . $e->getMessage();
-        redirect('dashboard');
+            $pdo->commit();
+
+            // If AJAX request, return JSON
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Ujian berhasil dikumpulkan',
+                    'score' => $totalScore,
+                    'session_id' => $sessionId
+                ]);
+                return;
+            }
+
+            $_SESSION['success'] = 'Ujian berhasil dikumpulkan!';
+            redirect('exam/result/' . $sessionId . '?t=' . time());
+        } catch (\Exception $e) {
+            if (isset($pdo) && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log("Submit error: " . $e->getMessage() . " - Session: " . ($sessionId ?? 'unknown'));
+
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => 'Gagal mengumpulkan ujian: ' . $e->getMessage()]);
+                return;
+            }
+
+            $_SESSION['error'] = 'Gagal mengumpulkan ujian: ' . $e->getMessage();
+            redirect('dashboard');
         }
     }
 
     public function result($sessionId)
     {
         requireAuth();
-        
+
         // Disable caching
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         header('Cache-Control: post-check=0, pre-check=0', false);
         header('Pragma: no-cache');
-        
+
         // Get session and exam info with user data - FRESH from database
         $stmt = db()->prepare("
             SELECT es.*, e.title, e.duration,
@@ -1277,13 +1330,13 @@ class ExamController
         ");
         $stmt->execute([$sessionId]);
         $session = $stmt->fetch();
-        
+
         if (!$session) {
             $_SESSION['error'] = 'Session tidak ditemukan';
             redirect('exam');
             return;
         }
-        
+
         // Get answers and calculate score FRESH
         $stmt = db()->prepare("
         SELECT a.*, q.correct_answer, q.points, q.question_text, q.type, q.option_scores
@@ -1293,20 +1346,23 @@ class ExamController
         ");
         $stmt->execute([$sessionId]);
         $answers = $stmt->fetchAll();
-        
+
         $totalScore = 0;
         $correctAnswers = 0;
         $totalQuestions = count($answers);
-        
+
         foreach ($answers as $answer) {
             $score = $this->getAnswerScore(
-                $answer['type'], $answer['answer'], $answer['correct_answer'],
-                $answer['points'], $answer['option_scores']
+                $answer['type'],
+                $answer['answer'],
+                $answer['correct_answer'],
+                $answer['points'],
+                $answer['option_scores']
             );
             $totalScore += $score;
             if ($score > 0) $correctAnswers++;
         }
-        
+
         // If calculated score is different from database, update it
         if ($totalScore != $session['score']) {
             $stmt = db()->prepare("UPDATE exam_sessions SET score = ?, is_best_score = 1 WHERE id = ?");
@@ -1314,7 +1370,7 @@ class ExamController
             $session['score'] = $totalScore; // Update local variable
             error_log("Result page: Updated score for session $sessionId from {$session['score']} to $totalScore");
         }
-        
+
         view('exams/result', [
             'session' => $session,
             'answers' => $answers,
@@ -1329,7 +1385,7 @@ class ExamController
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-        
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $title = $_POST['title'] ?? '';
             $subjectId = $_POST['subject_id'] ?? '';
@@ -1341,7 +1397,7 @@ class ExamController
             $status = $_POST['status'] ?? 'draft';
             $participantType = $_POST['participant_type'] ?? 'all';
             $selectedClasses = $_POST['selected_classes'] ?? [];
-            
+
             if (empty($title) || empty($duration) || empty($startTime) || empty($endTime)) {
                 $_SESSION['error'] = 'Semua field wajib diisi';
             } else if ($participantType === 'class' && empty($selectedClasses)) {
@@ -1351,7 +1407,7 @@ class ExamController
             } else {
                 try {
                     db()->beginTransaction();
-                    
+
                     // Update exam data
                     $stmt = db()->prepare("
                         UPDATE exams 
@@ -1360,7 +1416,7 @@ class ExamController
                         WHERE id = ?
                     ");
                     $stmt->execute([$title, $subjectId ?: null, $duration, $startTime, $endTime, $randomizeQuestions, $examType, $status, $examId]);
-                    
+
                     // Handle participants
                     if ($participantType === 'all') {
                         // Remove all specific participants (make it public)
@@ -1370,7 +1426,7 @@ class ExamController
                         // Remove existing participants
                         $stmt = db()->prepare("DELETE FROM exam_participants WHERE exam_id = ?");
                         $stmt->execute([$examId]);
-                        
+
                         // Add new participants based on selected classes
                         if (!empty($selectedClasses)) {
                             $placeholders = str_repeat('?,', count($selectedClasses) - 1) . '?';
@@ -1381,7 +1437,7 @@ class ExamController
                             ");
                             $stmt->execute($selectedClasses);
                             $students = $stmt->fetchAll();
-                            
+
                             if (!empty($students)) {
                                 $stmt = db()->prepare("
                                     INSERT IGNORE INTO exam_participants (exam_id, user_id) VALUES (?, ?)
@@ -1392,7 +1448,7 @@ class ExamController
                             }
                         }
                     }
-                    
+
                     db()->commit();
                     $_SESSION['success'] = 'Ujian berhasil diperbarui';
                     redirect('exam');
@@ -1403,23 +1459,23 @@ class ExamController
                 }
             }
         }
-        
+
         // Get exam data
         $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
         $stmt->execute([$examId]);
         $exam = $stmt->fetch();
-        
+
         if (!$exam) {
             $_SESSION['error'] = 'Ujian tidak ditemukan';
             redirect('exam');
             return;
         }
-        
+
         // Get subjects
         $stmt = db()->prepare("SELECT * FROM subjects ORDER BY name");
         $stmt->execute();
         $subjects = $stmt->fetchAll();
-        
+
         // Get exam subjects for multi-subject exams
         $examSubjects = [];
         if ($exam['exam_type'] === 'multi') {
@@ -1433,7 +1489,7 @@ class ExamController
             $stmt->execute([$examId]);
             $examSubjects = $stmt->fetchAll();
         }
-        
+
         view('exams/edit', [
             'exam' => $exam,
             'subjects' => $subjects,
@@ -1441,459 +1497,25 @@ class ExamController
         ]);
     }
 
-    /** Cek role Hanya admin & guru yang lolos. */
-    private function monitorAccess(bool $json = false): array
-    {
-        $u = (isset($_SESSION['user']) && is_array($_SESSION['user'])) ? $_SESSION['user'] : [];
-
-        $role = $_SESSION['role']
-             ?? $_SESSION['user_role']
-             ?? $u['role']
-             ?? '';
-        $role = strtolower(trim((string)$role));
-
-        $userId = (int)(
-            $_SESSION['user_id']
-            ?? $_SESSION['id']
-            ?? $u['id']
-            ?? 0
-        );
-
-        // Admin cukup dikenali dari role; guru wajib punya user id
-        $allowed = ($role === 'admin') || ($role === 'guru' && $userId > 0);
-
-        if (!$allowed) {
-            error_log('Monitor access denied. role="' . $role . '", user_id=' . $userId
-                . ', session keys: ' . implode(',', array_keys($_SESSION)));
-
-            if ($json) {
-                $this->monitorJsonError('Anda tidak memiliki akses', 403);
-            }
-            $_SESSION['error'] = 'Anda tidak memiliki akses ke halaman monitor';
-            redirect('dashboard');
-            exit;
-        }
-
-        return [
-            'role'     => $role,
-            'user_id'  => $userId,
-            'is_admin' => $role === 'admin',
-        ];
-    }
-
-    /** Admin boleh semua ujian; guru hanya ujian buatannya sendiri. */
-    private function canAccessExam(array $exam, array $access): bool
-    {
-        return $access['is_admin']
-            || (int)($exam['created_by'] ?? 0) === $access['user_id'];
-    }
-
-    private function monitorOwnerFilter(array $access): array
-    {
-        if ($access['is_admin']) {
-            return ['', []];
-        }
-        return [' AND e.created_by = ?', [$access['user_id']]];
-    }
-
-    private function monitorJsonError(string $message, int $code): void
-    {
-        if (ob_get_level()) {
-            ob_end_clean();
-        }
-        http_response_code($code);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => $message]);
-        exit;
-    }
-
-    // method monitor
-    public function monitor($examId = null)
-    {
-        requireAuth();
-        requireRole(['admin', 'guru']);
-        $access = $this->monitorAccess();
-
-        if ($examId) {
-            $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
-            $stmt->execute([$examId]);
-            $exam = $stmt->fetch();
-
-            if (!$exam) {
-                $_SESSION['error'] = 'Ujian tidak ditemukan';
-                redirect('exam/monitor');
-                return;
-            }
-
-            if (!$this->canAccessExam($exam, $access)) {
-                $_SESSION['error'] = 'Anda tidak memiliki akses ke ujian ini';
-                redirect('exam/monitor');
-                return;
-            }
-
-            view('exams/monitor', ['exam' => $exam]);
-            return;
-        }
-
-        // ===== pagination =====
-        $perPage    = 24;
-        $page       = max(1, (int)($_GET['page'] ?? 1));
-        $totalExams = 0;
-        $totalPages = 1;
-        $exams      = [];
-
-        [$ownerSql, $ownerParams] = $this->monitorOwnerFilter($access);
-
-        try {
-            $stmtCount = db()->prepare("
-                SELECT COUNT(*)
-                FROM exams e
-                WHERE EXISTS (SELECT 1 FROM exam_sessions es WHERE es.exam_id = e.id)
-                {$ownerSql}
-            ");
-            $stmtCount->execute($ownerParams);
-            $totalExams = (int)$stmtCount->fetchColumn();
-
-            $totalPages = max(1, (int)ceil($totalExams / $perPage));
-            $page       = min($page, $totalPages);
-            $offset     = ($page - 1) * $perPage;
-
-            $stmt = db()->prepare("
-                SELECT e.id, e.title, e.start_time, e.duration
-                FROM exams e
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM exam_sessions es
-                    WHERE es.exam_id = e.id
-                )
-                {$ownerSql}
-                ORDER BY e.start_time DESC, e.id DESC
-                LIMIT {$perPage} OFFSET {$offset}
-            ");
-            $stmt->execute($ownerParams);
-            $exams = $stmt->fetchAll();
-
-            if ($exams) {
-                $examIds = array_column($exams, 'id');
-                $placeholders = implode(',', array_fill(0, count($examIds), '?'));
-
-                $stmtSessions = db()->prepare("
-                    SELECT
-                        exam_id,
-                        COUNT(DISTINCT CASE WHEN status IN ('active', 'in_progress')
-                                            THEN user_id END) AS active_count,
-                        COUNT(DISTINCT CASE WHEN status IN ('completed', 'submitted', 'graded')
-                                            THEN user_id END) AS submitted_count,
-                        COUNT(DISTINCT user_id) AS total_sessions
-                    FROM exam_sessions
-                    WHERE exam_id IN ({$placeholders})
-                    GROUP BY exam_id
-                ");
-                $stmtSessions->execute($examIds);
-                $sessionStats = [];
-                foreach ($stmtSessions->fetchAll() as $row) {
-                    $sessionStats[$row['exam_id']] = $row;
-                }
-
-                $stmtParticipants = db()->prepare("
-                    SELECT p.exam_id, COUNT(DISTINCT p.user_id) AS not_started_count
-                    FROM exam_participants p
-                    LEFT JOIN exam_sessions es
-                        ON es.exam_id = p.exam_id AND es.user_id = p.user_id
-                    WHERE p.exam_id IN ({$placeholders})
-                      AND es.id IS NULL
-                    GROUP BY p.exam_id
-                ");
-                $stmtParticipants->execute($examIds);
-                $notStartedByExam = [];
-                foreach ($stmtParticipants->fetchAll() as $row) {
-                    $notStartedByExam[$row['exam_id']] = (int)$row['not_started_count'];
-                }
-
-                foreach ($exams as &$exam) {
-                    $stats = $sessionStats[$exam['id']] ?? [];
-                    $exam['active_count'] = (int)($stats['active_count'] ?? 0);
-                    $exam['submitted_count'] = (int)($stats['submitted_count'] ?? 0);
-                    $exam['total_sessions'] = (int)($stats['total_sessions'] ?? 0);
-                    $exam['not_started_count'] = $notStartedByExam[$exam['id']] ?? 0;
-                    $exam['total_participants'] = $exam['total_sessions'] + $exam['not_started_count'];
-                }
-                unset($exam);
-            }
-
-        } catch (Throwable $e) {
-            error_log('Monitor list error: ' . $e->getMessage());
-            $exams = [];
-        }
-
-        view('exams/monitor_list', [
-            'exams'      => $exams,
-            'page'       => $page,
-            'perPage'    => $perPage,
-            'totalExams' => $totalExams,
-            'totalPages' => $totalPages,
-            'isAdmin'    => $access['is_admin'],
-        ]);
-    }
-
-    // method monitorData
-    public function monitorData($examId = null)
-    {
-        if (ob_get_level()) {
-            ob_end_clean();
-        }
-        ob_start();
-
-        header('Content-Type: application/json');
-        header('Cache-Control: no-cache, must-revalidate');
-        header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
-
-        try {
-            requireAuth();
-            requireRole(['admin', 'guru']);
-        } catch (Throwable $e) {
-            ob_end_clean();
-            echo json_encode([
-                'success' => false,
-                'message' => 'Authentication failed: ' . $e->getMessage()
-            ]);
-            exit;
-        }
-
-        $access = $this->monitorAccess(true);
-
-        try {
-            if ($examId) {
-                $stmtOwn = db()->prepare("SELECT id, created_by FROM exams WHERE id = ?");
-                $stmtOwn->execute([$examId]);
-                $examRow = $stmtOwn->fetch();
-
-                if (!$examRow) {
-                    $this->monitorJsonError('Ujian tidak ditemukan', 404);
-                }
-                if (!$this->canAccessExam($examRow, $access)) {
-                    $this->monitorJsonError('Anda tidak memiliki akses ke ujian ini', 403);
-                }
-
-                $stmt = db()->prepare("
-                    SELECT
-                        es.id,
-                        es.exam_id,
-                        es.user_id,
-                        es.status,
-                        es.started_at,
-                        es.submitted_at,
-                        COALESCE(es.violation_count, 0) as violation_count,
-                        es.suspension_reason,
-                        es.suspended_at,
-                        TIMESTAMPDIFF(SECOND, es.started_at, NOW()) as elapsed_seconds,
-                        e.title as exam_title,
-                        e.duration,
-                        u.username,
-                        COALESCE(u.full_name, u.username) as full_name,
-                        u.kelas,
-                        (SELECT COUNT(*) FROM answers a WHERE a.session_id = es.id) as answered_count,
-                        (SELECT COUNT(*) FROM exam_questions eq WHERE eq.exam_id = es.exam_id) as total_questions
-                    FROM exam_sessions es
-                    JOIN users u ON es.user_id = u.id
-                    JOIN exams e ON es.exam_id = e.id
-                    WHERE es.exam_id = ?
-                    ORDER BY es.started_at DESC
-                ");
-                $stmt->execute([$examId]);
-                $sessions = $stmt->fetchAll();
-                
-                $stmtSummary = db()->prepare("
-                    SELECT
-                        COUNT(DISTINCT es.user_id) AS total_sessions,
-                        COUNT(DISTINCT CASE WHEN es.status IN ('active','in_progress') THEN es.user_id END) AS active_count,
-                        COUNT(DISTINCT CASE WHEN es.status IN ('completed','submitted','graded') THEN es.user_id END) AS submitted_count,
-                        COUNT(DISTINCT CASE WHEN es.status = 'suspended' THEN es.user_id END) AS suspended_count
-                    FROM exam_sessions es
-                    WHERE es.exam_id = ?
-                ");
-                $stmtSummary->execute([$examId]);
-                $summaryRow = $stmtSummary->fetch();
-                
-                $stmtNotStarted = db()->prepare("
-                    SELECT COUNT(DISTINCT p.user_id) AS not_started_count
-                    FROM exam_participants p
-                    WHERE p.exam_id = ?
-                      AND NOT EXISTS (
-                          SELECT 1 FROM exam_sessions s
-                           WHERE s.exam_id = p.exam_id AND s.user_id = p.user_id
-                      )
-                ");
-                $stmtNotStarted->execute([$examId]);
-                $notStartedRow = $stmtNotStarted->fetch();
-                
-                $totalSessions = (int)($summaryRow['total_sessions'] ?? 0);
-                $notStarted    = (int)($notStartedRow['not_started_count'] ?? 0);
-                
-                $summary = [
-                    'total_participants' => $totalSessions + $notStarted,
-                    'active_count'       => (int)($summaryRow['active_count'] ?? 0),
-                    'submitted_count'    => (int)($summaryRow['submitted_count'] ?? 0),
-                    'suspended_count'    => (int)($summaryRow['suspended_count'] ?? 0),
-                    'not_started_count'  => $notStarted,
-                ];
-
-                $processedSessions = [];
-                foreach ($sessions as $session) {
-                    $processedSessions[] = [
-                        'id' => $session['id'],
-                        'exam_id' => $session['exam_id'],
-                        'user_id' => $session['user_id'],
-                        'status' => $session['status'],
-                        'started_at' => $session['started_at'],
-                        'submitted_at' => $session['submitted_at'],
-                        'exam_title' => $session['exam_title'],
-                        'duration' => $session['duration'],
-                        'student_name' => $session['full_name'],
-                        'full_name' => $session['full_name'],
-                        'username' => $session['username'],
-                        'kelas' => $session['kelas'],
-                        'elapsed_seconds' => max(0, (int)($session['elapsed_seconds'] ?? 0)),
-                        'violation_count' => (int)($session['violation_count'] ?? 0),
-                        'suspension_count' => 0,
-                        'suspension_reason' => $session['suspension_reason'] ?? null,
-                        'suspended_at' => $session['suspended_at'] ?? null,
-                        'violation_logs' => [],
-                        'status_text' => $this->getStatusText($session['status']),
-                        'answered_count' => (int)$session['answered_count'],
-                        'total_questions' => (int)$session['total_questions']
-                    ];
-                }
-
-                if (!empty($processedSessions)) {
-                    $sessionIds = array_column($processedSessions, 'id');
-                    $placeholders = implode(',', array_fill(0, count($sessionIds), '?'));
-                    $stmtV = db()->prepare("
-                        SELECT session_id, reason, violation_count, created_at
-                        FROM exam_violations
-                        WHERE session_id IN ($placeholders)
-                        ORDER BY created_at ASC
-                    ");
-                    $stmtV->execute($sessionIds);
-                    $violations = $stmtV->fetchAll();
-
-                    $violationMap = [];
-                    $suspensionCountMap = [];
-                    foreach ($violations as $v) {
-                        $violationMap[$v['session_id']][] = [
-                            'reason' => $v['reason'],
-                            'count' => $v['violation_count'],
-                            'time' => $v['created_at'],
-                        ];
-                        if (str_starts_with((string)$v['reason'], 'Auto-suspend event:')) {
-                            $suspensionCountMap[$v['session_id']] = ($suspensionCountMap[$v['session_id']] ?? 0) + 1;
-                        }
-                    }
-
-                    foreach ($processedSessions as &$s) {
-                        $s['violation_logs'] = $violationMap[$s['id']] ?? [];
-                        $s['suspension_count'] = $suspensionCountMap[$s['id']] ?? 0;
-                    }
-                    unset($s);
-                }
-
-                ob_end_clean();
-                echo json_encode([
-                    'success' => true,
-                    'data' => $processedSessions,
-                    'summary' => $summary,
-                    'debug' => [
-                        'exam_id' => $examId,
-                        'session_count' => count($processedSessions),
-                        'timestamp' => date('Y-m-d H:i:s')
-                    ]
-                ]);
-                exit;
-
-            } else {
-                [$ownerSql, $ownerParams] = $this->monitorOwnerFilter($access);
-
-                $stmt = db()->prepare("
-                    SELECT
-                        es.id,
-                        es.exam_id,
-                        es.user_id,
-                        es.status,
-                        es.started_at,
-                        e.title as exam_title,
-                        u.username,
-                        u.full_name
-                    FROM exam_sessions es
-                    JOIN users u ON es.user_id = u.id
-                    JOIN exams e ON es.exam_id = e.id
-                    WHERE es.started_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-                    {$ownerSql}
-                    ORDER BY es.started_at DESC
-                ");
-                $stmt->execute($ownerParams);
-                $sessions = $stmt->fetchAll();
-
-                ob_end_clean();
-                echo json_encode([
-                    'success' => true,
-                    'data' => ['Semua Peserta' => $sessions]
-                ]);
-                exit;
-            }
-
-        } catch (Throwable $e) {
-            error_log("MonitorData Error: " . $e->getMessage());
-            ob_end_clean();
-            echo json_encode([
-                'success' => false,
-                'message' => 'Database error: ' . $e->getMessage(),
-                'debug' => [
-                    'exam_id' => $examId,
-                    'error_line' => $e->getLine(),
-                    'error_file' => basename($e->getFile()),
-                    'timestamp' => date('Y-m-d H:i:s')
-                ]
-            ]);
-            exit;
-        }
-    }
-    
-    private function getStatusText($status) {
-        switch ($status) {
-            case 'active':
-            case 'in_progress':
-                return 'Sedang Ujian';
-            case 'completed':
-            case 'submitted':
-                return 'Selesai';
-            case 'graded':
-                return 'Dinilai';
-            case 'suspended':
-                return 'Ter-suspend';
-            default:
-                return ucfirst($status);
-        }
-    }
-
     public function assignQuestions($examId)
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-        
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Get exam info first to check exam type
             $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
             $stmt->execute([$examId]);
             $exam = $stmt->fetch();
-            
+
             if (!$exam) {
                 $_SESSION['error'] = 'Ujian tidak ditemukan';
                 redirect('exam');
                 return;
             }
-            
+
             $selectedQuestions = [];
-            
+
             // Handle multi-subject exam
             if ($exam['exam_type'] === 'multi') {
                 // Collect questions from all subjects
@@ -1906,7 +1528,7 @@ class ExamController
                 // Handle single subject exam
                 $selectedQuestions = $_POST['questions'] ?? [];
             }
-            
+
             if (empty($selectedQuestions)) {
                 $_SESSION['error'] = 'Pilih minimal satu soal';
             } else {
@@ -1914,13 +1536,13 @@ class ExamController
                     // Clear existing questions
                     $stmt = db()->prepare("DELETE FROM exam_questions WHERE exam_id = ?");
                     $stmt->execute([$examId]);
-                    
+
                     // Add selected questions
                     $stmt = db()->prepare("INSERT INTO exam_questions (exam_id, question_id, order_num) VALUES (?, ?, ?)");
                     foreach ($selectedQuestions as $index => $questionId) {
                         $stmt->execute([$examId, $questionId, $index + 1]);
                     }
-                    
+
                     $_SESSION['success'] = 'Soal berhasil ditambahkan ke ujian';
                     redirect('exam');
                     return;
@@ -1929,33 +1551,33 @@ class ExamController
                 }
             }
         }
-        
+
         // Get exam info (already retrieved in POST section if it was POST request)
         if (!isset($exam)) {
             $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
             $stmt->execute([$examId]);
             $exam = $stmt->fetch();
-            
+
             if (!$exam) {
                 $_SESSION['error'] = 'Ujian tidak ditemukan';
                 redirect('exam');
                 return;
             }
         }
-        
+
         // Check if exam already has questions
         $stmt = db()->prepare("SELECT COUNT(*) FROM exam_questions WHERE exam_id = ?");
         $stmt->execute([$examId]);
         $hasQuestions = $stmt->fetchColumn() > 0 || !empty($exam['exam_pdf']);
-        
+
         // Get current user
         $user = auth();
-        
+
         // If exam has no questions yet, show empty state with options
         if (!$hasQuestions) {
             // For new exams, show the assign interface with empty state
             $_SESSION['info'] = 'Ujian baru perlu ditambahkan soal terlebih dahulu sebelum bisa digunakan.';
-            
+
             // Get all available questions for empty state
             // Guru hanya melihat soal miliknya sendiri; admin melihat semua soal
             $onlyMine = ($user['role'] === 'guru');
@@ -1978,11 +1600,11 @@ class ExamController
             $paramsQ[] = $user['id'];
             $stmt->execute($paramsQ);
             $questions = $stmt->fetchAll();
-            
+
             // Get exam subjects for multi-subject exams
             $examSubjects = [];
             $questionsBySubject = [];
-            
+
             if ($exam['exam_type'] === 'multi') {
                 $stmt = db()->prepare("
                     SELECT es.*, s.name as subject_name 
@@ -1992,7 +1614,7 @@ class ExamController
                 ");
                 $stmt->execute([$examId]);
                 $examSubjects = $stmt->fetchAll();
-                
+
                 // Group questions by subject
                 foreach ($questions as $q) {
                     if ($q['subject_id']) {
@@ -2000,7 +1622,7 @@ class ExamController
                     }
                 }
             }
-            
+
             view('exams/assign', [
                 'exam' => $exam,
                 'hasQuestions' => false,
@@ -2011,7 +1633,7 @@ class ExamController
             ]);
             return;
         }
-        
+
         // If exam already has questions, show full interface
         // Guru hanya melihat soal miliknya sendiri; admin melihat semua soal
         $onlyMine = ($user['role'] === 'guru');
@@ -2036,11 +1658,11 @@ class ExamController
         $paramsQ[] = $user['id'];
         $stmt->execute($paramsQ);
         $questions = $stmt->fetchAll();
-        
+
         // Separate user's questions from others
         $myQuestions = [];
         $otherQuestions = [];
-        
+
         foreach ($questions as $q) {
             if ($q['is_mine']) {
                 $myQuestions[] = $q;
@@ -2048,11 +1670,11 @@ class ExamController
                 $otherQuestions[] = $q;
             }
         }
-        
+
         // Get exam subjects for multi-subject exams
         $examSubjects = [];
         $questionsBySubject = [];
-        
+
         if ($exam['exam_type'] === 'multi') {
             $stmt = db()->prepare("
                 SELECT es.*, s.name as subject_name 
@@ -2062,7 +1684,7 @@ class ExamController
             ");
             $stmt->execute([$examId]);
             $examSubjects = $stmt->fetchAll();
-            
+
             // Group questions by subject
             foreach ($questions as $q) {
                 if ($q['subject_id']) {
@@ -2070,7 +1692,7 @@ class ExamController
                 }
             }
         }
-        
+
         view('exams/assign', [
             'exam' => $exam,
             'hasQuestions' => true,
@@ -2082,18 +1704,18 @@ class ExamController
             'questionsBySubject' => $questionsBySubject
         ]);
     }
-    
-    
+
+
     public function getAvailableQuestions($examId)
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-        
+
         header('Content-Type: application/json');
-        
+
         try {
             $user = auth();
-            
+
             // Get questions
             // Guru hanya melihat soal miliknya sendiri; admin melihat semua soal
             $onlyMine = ($user['role'] === 'guru');
@@ -2118,16 +1740,16 @@ class ExamController
             $paramsQ[] = $user['id'];
             $stmt->execute($paramsQ);
             $questions = $stmt->fetchAll();
-            
+
             // Generate HTML
             ob_start();
-            ?>
+?>
             <form method="POST" style="background: white; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0;">
                 <div style="margin-bottom: 20px;">
                     <h5>Pilih Soal untuk Ujian</h5>
                     <p style="color: #64748b; font-size: 0.9rem;">Centang soal yang ingin digunakan dalam ujian ini.</p>
                 </div>
-                
+
                 <?php if (empty($questions)): ?>
                     <div style="text-align: center; padding: 40px; color: #64748b;">
                         <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
@@ -2138,11 +1760,11 @@ class ExamController
                     <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px;">
                         <?php foreach ($questions as $q): ?>
                             <div style="border-bottom: 1px solid #f1f5f9; padding: 15px 0; display: flex; align-items: flex-start; gap: 12px;">
-                                <input type="checkbox" 
-                                       name="questions[]" 
-                                       value="<?= $q['id'] ?>"
-                                       <?= ($q['is_selected'] ?? 0) > 0 ? 'checked' : '' ?>
-                                       style="margin-top: 4px;">
+                                <input type="checkbox"
+                                    name="questions[]"
+                                    value="<?= $q['id'] ?>"
+                                    <?= ($q['is_selected'] ?? 0) > 0 ? 'checked' : '' ?>
+                                    style="margin-top: 4px;">
                                 <div style="flex: 1;">
                                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
                                         <span style="background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">
@@ -2170,7 +1792,7 @@ class ExamController
                             </div>
                         <?php endforeach; ?>
                     </div>
-                    
+
                     <div style="margin-top: 20px; text-align: center;">
                         <button type="submit" class="btn btn-primary" style="padding: 12px 30px;">
                             <i class="fas fa-save"></i> Simpan Pilihan Soal
@@ -2178,14 +1800,13 @@ class ExamController
                     </div>
                 <?php endif; ?>
             </form>
-            <?php
+<?php
             $html = ob_get_clean();
-            
+
             echo json_encode([
                 'success' => true,
                 'html' => $html
             ]);
-            
         } catch (Exception $e) {
             echo json_encode([
                 'success' => false,
@@ -2193,43 +1814,43 @@ class ExamController
             ]);
         }
     }
-    
+
     public function quickPublish($examId)
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-        
+
         header('Content-Type: application/json');
-        
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'message' => 'Invalid request method']);
             return;
         }
-        
+
         $action = $_POST['action'] ?? 'publish';
-        
+
         try {
             if ($action === 'fix') {
                 // Fix exam by changing status to draft
                 $stmt = db()->prepare("UPDATE exams SET status = 'draft' WHERE id = ?");
                 $stmt->execute([$examId]);
-                
+
                 echo json_encode([
                     'success' => true,
                     'message' => 'Exam status changed to draft'
                 ]);
                 return;
             }
-            
+
             // Check if exam has questions before publishing
             $stmt = db()->prepare("SELECT exam_pdf FROM exams WHERE id = ?");
             $stmt->execute([$examId]);
             $examPdf = $stmt->fetchColumn();
-            
+
             $stmt = db()->prepare("SELECT COUNT(*) FROM exam_questions WHERE exam_id = ?");
             $stmt->execute([$examId]);
             $questionCount = $stmt->fetchColumn();
-            
+
             if ($questionCount == 0 && empty($examPdf)) {
                 echo json_encode([
                     'success' => false,
@@ -2237,11 +1858,11 @@ class ExamController
                 ]);
                 return;
             }
-            
+
             // Update exam status to published
             $stmt = db()->prepare("UPDATE exams SET status = 'published' WHERE id = ?");
             $stmt->execute([$examId]);
-            
+
             if ($stmt->rowCount() > 0) {
                 echo json_encode([
                     'success' => true,
@@ -2253,7 +1874,6 @@ class ExamController
                     'message' => 'Exam not found or already published'
                 ]);
             }
-            
         } catch (Exception $e) {
             echo json_encode([
                 'success' => false,
@@ -2266,40 +1886,39 @@ class ExamController
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-        
+
         header('Content-Type: application/json');
-        
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['confirm_delete'])) {
             echo json_encode(['success' => false, 'message' => 'Invalid request']);
             return;
         }
-        
+
         try {
             db()->beginTransaction();
-            
+
             // Delete in correct order to avoid foreign key constraints
             $stmt = db()->prepare("DELETE FROM answers WHERE session_id IN (SELECT id FROM exam_sessions WHERE exam_id = ?)");
             $stmt->execute([$examId]);
-            
+
             $stmt = db()->prepare("DELETE FROM exam_sessions WHERE exam_id = ?");
             $stmt->execute([$examId]);
-            
+
             $stmt = db()->prepare("DELETE FROM exam_questions WHERE exam_id = ?");
             $stmt->execute([$examId]);
-            
+
             $stmt = db()->prepare("DELETE FROM exam_participants WHERE exam_id = ?");
             $stmt->execute([$examId]);
-            
+
             $stmt = db()->prepare("DELETE FROM exam_subjects WHERE exam_id = ?");
             $stmt->execute([$examId]);
-            
+
             $stmt = db()->prepare("DELETE FROM exams WHERE id = ?");
             $stmt->execute([$examId]);
-            
+
             db()->commit();
-            
+
             echo json_encode(['success' => true, 'message' => 'Ujian berhasil dihapus']);
-            
         } catch (Exception $e) {
             db()->rollBack();
             echo json_encode(['success' => false, 'message' => 'Gagal menghapus ujian: ' . $e->getMessage()]);
@@ -2379,113 +1998,236 @@ class ExamController
             echo json_encode(['success' => false, 'message' => 'Gagal menolak token: ' . $e->getMessage()]);
         }
     }
-    
+
     public function logViolation()
     {
         requireAuth();
-        
+
         header('Content-Type: application/json');
-        
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
             echo json_encode(['success' => false, 'message' => 'Invalid request']);
             return;
         }
-        
-        $sessionId = $_POST['session_id'] ?? '';
-        $reason    = $_POST['reason'] ?? '';
-        $count     = (int)($_POST['count'] ?? 0);
-        
+
+        $sessionId = filter_var($_POST['session_id'] ?? null, FILTER_VALIDATE_INT);
+        $eventUuid = strtolower(trim((string)($_POST['event_uuid'] ?? '')));
+        $reason = trim((string)($_POST['reason'] ?? ''));
+        $reasonLength = function_exists('mb_strlen') ? mb_strlen($reason, 'UTF-8') : strlen($reason);
+        if (
+            $sessionId === false
+            || $sessionId === null
+            || $sessionId <= 0
+            || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $eventUuid)
+            || $reason === ''
+            || $reasonLength > 255
+        ) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Data pelanggaran tidak valid']);
+            return;
+        }
+
+        $pdo = null;
         try {
-            // Verifikasi bahwa session ini milik user yang login
+            $pdo = db();
             $user = auth();
-            $stmtOwn = db()->prepare("SELECT id FROM exam_sessions WHERE id = ? AND user_id = ?");
-            $stmtOwn->execute([$sessionId, $user['id']]);
-            if (!$stmtOwn->fetch()) {
+            $pdo->beginTransaction();
+
+            $stmtSession = $pdo->prepare("
+                SELECT es.id, es.exam_id, es.status, es.submitted_at, e.exam_pdf
+                FROM exam_sessions es
+                JOIN exams e ON e.id = es.exam_id
+                WHERE es.id = ? AND es.user_id = ?
+                FOR UPDATE
+            ");
+            $stmtSession->execute([$sessionId, $user['id']]);
+            $session = $stmtSession->fetch();
+            if (!$session) {
+                $pdo->rollBack();
+                http_response_code(404);
                 echo json_encode(['success' => false, 'message' => 'Session tidak valid']);
                 return;
             }
 
-            // Log violation to database
-            $stmt = db()->prepare("
-                INSERT INTO exam_violations (session_id, user_id, reason, violation_count, created_at)
-                VALUES (?, ?, ?, ?, NOW())
+            $stmtEvent = $pdo->prepare("
+                SELECT id
+                FROM exam_violations
+                WHERE session_id = ? AND event_uuid = ?
+                LIMIT 1
             ");
-            $stmt->execute([$sessionId, $user['id'], $reason, $count]);
-            
-            // Update session violation count
-            $stmt = db()->prepare("
-                UPDATE exam_sessions 
-                SET violation_count = ?
-                WHERE id = ?
-            ");
-            $stmt->execute([$count, $sessionId]);
-
-            // ── Backend enforcement: batas 1 pelanggaran ──────────────────
-            // Jika sudah >= 1 pelanggaran, auto-submit dari server
-            $autoSubmitted = false;
-            if ($count >= 1) {
-                // Cek apakah session masih aktif (belum submitted)
-                $stmtCheck = db()->prepare("
-                    SELECT id, status FROM exam_sessions
-                    WHERE id = ? AND user_id = ?
-                    AND status NOT IN ('submitted','completed','suspended')
-                    AND submitted_at IS NULL
-                ");
-                $stmtCheck->execute([$sessionId, $user['id']]);
-                $activeSession = $stmtCheck->fetch();
-
-                if ($activeSession) {
-                    // Hitung skor dari jawaban yang ada
-                    $stmtAnswers = db()->prepare("
-                        SELECT a.answer, q.correct_answer, q.points, q.type, q.option_scores
-                        FROM answers a
-                        JOIN questions q ON a.question_id = q.id
-                        WHERE a.session_id = ?
-                    ");
-                    $stmtAnswers->execute([$sessionId]);
-                    $answers = $stmtAnswers->fetchAll();
-                    
-                    $totalScore = 0;
-                    foreach ($answers as $ans) {
-                        $totalScore += $this->getAnswerScore(
-                            $ans['type'], $ans['answer'], $ans['correct_answer'],
-                            $ans['points'], $ans['option_scores']
-                        );
-                    }
-
-                    // Submit ujian (guard: hanya jika belum submitted)
-                    $stmtSubmit = db()->prepare("
-                        UPDATE exam_sessions
-                        SET status = 'submitted',
-                            submitted_at = NOW(),
-                            score = ?,
-                            is_best_score = 1,
-                            suspension_reason = ?
-                        WHERE id = ? AND submitted_at IS NULL
-                    ");
-                    $stmtSubmit->execute([
-                        $totalScore,
-                        'Auto-submit: pelanggaran - ' . $reason,
-                        $sessionId
-                    ]);
-
-                    $autoSubmitted = true;
-                    error_log("Auto-submit via logViolation: session=$sessionId, score=$totalScore, reason=$reason");
-                }
+            $stmtEvent->execute([$sessionId, $eventUuid]);
+            $eventAlreadyLogged = $stmtEvent->fetchColumn() !== false;
+            if (
+                !$eventAlreadyLogged
+                && ($session['submitted_at'] !== null
+                    || in_array($session['status'], ['submitted', 'completed'], true))
+            ) {
+                $pdo->rollBack();
+                http_response_code(409);
+                echo json_encode(['success' => false, 'message' => 'Ujian sudah dikumpulkan']);
+                return;
             }
-            // ── Akhir backend enforcement ──────────────────────────────────
 
+            $eventResult = $this->persistViolationEvent(
+                $pdo,
+                (int)$sessionId,
+                (int)$user['id'],
+                $eventUuid,
+                $reason
+            );
+            $autoSubmitted = false;
+            if (
+                $eventResult['count'] >= self::VIOLATION_LIMIT
+                && in_array($session['status'], ['active', 'in_progress'], true)
+                && $session['submitted_at'] === null
+            ) {
+                $stmtSuspend = $pdo->prepare("
+                    UPDATE exam_sessions
+                    SET status = 'suspended',
+                        suspended_at = COALESCE(suspended_at, NOW()),
+                        suspension_reason = ?
+                    WHERE id = ? AND submitted_at IS NULL
+                ");
+                $stmtSuspend->execute(['Pelanggaran ujian: ' . $reason, $sessionId]);
+
+                $autoSubmitted = $this->autoSubmitViolationSession(
+                    $pdo,
+                    $session,
+                    (int)$user['id'],
+                    'Auto-submit: pelanggaran - ' . $reason
+                );
+            }
+
+            $pdo->commit();
             echo json_encode([
-                'success'       => true,
-                'message'       => 'Violation logged',
-                'auto_submitted'=> $autoSubmitted,
+                'success' => true,
+                'message' => $eventResult['inserted'] ? 'Violation logged' : 'Violation already logged',
+                'violation_count' => $eventResult['count'],
+                'auto_submitted' => $autoSubmitted,
             ]);
         } catch (Exception $e) {
+            if ($pdo instanceof \PDO && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             error_log("Log violation error: " . $e->getMessage());
+            http_response_code(500);
             echo json_encode(['success' => false, 'message' => 'Failed to log violation']);
         }
     }
-    
+
+    private function persistViolationEvent(
+        \PDO $pdo,
+        int $sessionId,
+        int $userId,
+        string $eventUuid,
+        string $reason
+    ): array {
+        $stmtEvent = $pdo->prepare("
+            SELECT id
+            FROM exam_violations
+            WHERE session_id = ? AND event_uuid = ?
+            LIMIT 1
+        ");
+        $stmtEvent->execute([$sessionId, $eventUuid]);
+        $eventExists = $stmtEvent->fetchColumn() !== false;
+        $inserted = false;
+
+        if (!$eventExists) {
+            $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM exam_violations WHERE session_id = ?");
+            $stmtCount->execute([$sessionId]);
+            $nextCount = (int)$stmtCount->fetchColumn() + 1;
+
+            try {
+                $stmtInsert = $pdo->prepare("
+                    INSERT INTO exam_violations
+                        (session_id, user_id, event_uuid, reason, violation_count, created_at)
+                    VALUES (?, ?, ?, ?, ?, NOW())
+                ");
+                $stmtInsert->execute([$sessionId, $userId, $eventUuid, $reason, $nextCount]);
+                $inserted = true;
+            } catch (\PDOException $e) {
+                if ((int)($e->errorInfo[1] ?? 0) !== 1062) {
+                    throw $e;
+                }
+
+                $stmtEvent->execute([$sessionId, $eventUuid]);
+                if ($stmtEvent->fetchColumn() === false) {
+                    throw $e;
+                }
+            }
+        }
+
+        $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM exam_violations WHERE session_id = ?");
+        $stmtCount->execute([$sessionId]);
+        $violationCount = (int)$stmtCount->fetchColumn();
+
+        $stmtUpdate = $pdo->prepare("UPDATE exam_sessions SET violation_count = ? WHERE id = ?");
+        $stmtUpdate->execute([$violationCount, $sessionId]);
+
+        return [
+            'inserted' => $inserted,
+            'count' => $violationCount,
+        ];
+    }
+
+    private function calculateSessionScore(\PDO $pdo, int $sessionId)
+    {
+        $stmtAnswers = $pdo->prepare("
+            SELECT a.answer, q.correct_answer, q.points, q.type, q.option_scores
+            FROM answers a
+            JOIN questions q ON a.question_id = q.id
+            WHERE a.session_id = ?
+        ");
+        $stmtAnswers->execute([$sessionId]);
+
+        $totalScore = 0;
+        foreach ($stmtAnswers->fetchAll() as $answer) {
+            $totalScore += $this->getAnswerScore(
+                $answer['type'],
+                $answer['answer'],
+                $answer['correct_answer'],
+                $answer['points'],
+                $answer['option_scores']
+            );
+        }
+
+        return $totalScore;
+    }
+
+    private function autoSubmitViolationSession(
+        \PDO $pdo,
+        array $session,
+        int $userId,
+        string $reason,
+        bool $clearOtherBestScores = false
+    ): bool {
+        $totalScore = $this->calculateSessionScore($pdo, (int)$session['id']);
+        // Jangan mengubah status menjadi 'submitted' — status sudah di-set ke 'suspended' oleh pemanggil.
+        // Hanya catat skor dan alasan suspensi, biarkan status tetap 'suspended'.
+        $stmtSubmit = $pdo->prepare("
+            UPDATE exam_sessions
+            SET score = ?,
+                is_best_score = 1,
+                suspension_reason = ?
+            WHERE id = ? AND submitted_at IS NULL
+        ");
+        $stmtSubmit->execute([$totalScore, $reason, $session['id']]);
+        $autoSubmitted = $stmtSubmit->rowCount() > 0;
+
+        if ($autoSubmitted && $clearOtherBestScores) {
+            $stmtOtherScores = $pdo->prepare("
+                UPDATE exam_sessions
+                SET is_best_score = 0
+                WHERE user_id = ? AND exam_id = ? AND id != ?
+                  AND status IN ('submitted', 'graded', 'completed')
+            ");
+            $stmtOtherScores->execute([$userId, $session['exam_id'], $session['id']]);
+        }
+
+        return $autoSubmitted;
+    }
+
     public function suspendSession()
     {
         requireAuth();
@@ -2505,12 +2247,14 @@ class ExamController
             }
 
             $sessionId = filter_var($_POST['session_id'] ?? null, FILTER_VALIDATE_INT);
-            $eventId = (string)($_POST['event_id'] ?? '');
+            $eventUuid = strtolower(trim((string)($_POST['event_uuid'] ?? $_POST['event_id'] ?? '')));
             $reason = trim((string)($_POST['reason'] ?? ''));
+            $reasonLength = function_exists('mb_strlen') ? mb_strlen($reason, 'UTF-8') : strlen($reason);
             $remainingTime = filter_var($_POST['remaining_time'] ?? null, FILTER_VALIDATE_INT);
             if (
                 !$sessionId
-                || !preg_match('/^[a-zA-Z0-9-]{16,64}$/', $eventId)
+                || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $eventUuid)
+                || $reasonLength > 255
                 || $remainingTime === false
                 || $remainingTime === null
                 || $remainingTime < 0
@@ -2523,9 +2267,10 @@ class ExamController
             $pdo = db();
             $pdo->beginTransaction();
             $stmtSession = $pdo->prepare("
-                SELECT exam_id, status, submitted_at
-                FROM exam_sessions
-                WHERE id = ? AND user_id = ?
+                SELECT es.id, es.exam_id, es.status, es.submitted_at, es.remaining_time, es.started_at, e.exam_pdf
+                FROM exam_sessions es
+                JOIN exams e ON e.id = es.exam_id
+                WHERE es.id = ? AND es.user_id = ?
                 FOR UPDATE
             ");
             $stmtSession->execute([$sessionId, $user['id']]);
@@ -2537,122 +2282,76 @@ class ExamController
                 return;
             }
 
-            $suspensionReason = 'Auto-suspend event:' . $eventId . ' - Keluar fullscreen atau kehilangan fokus';
-            $stmtDuplicate = $pdo->prepare("
+            // Hitung waktu aktif yang sudah digunakan sejak started_at (server-side, bukan dari klien)
+            $savedRemaining = (int)($session['remaining_time'] ?? 0);
+            $startedAt    = $session['started_at'] ? strtotime($session['started_at']) : time();
+            $now          = time();
+            $elapsed      = max(0, $now - $startedAt);
+            $newRemaining = max(0, $savedRemaining - $elapsed);
+
+            $stmtEvent = $pdo->prepare("
                 SELECT id
                 FROM exam_violations
-                WHERE session_id = ? AND reason = ?
+                WHERE session_id = ? AND event_uuid = ?
                 LIMIT 1
             ");
-            $stmtDuplicate->execute([$sessionId, $suspensionReason]);
-            if ($stmtDuplicate->fetch()) {
-                $stmtCount = $pdo->prepare("
-                    SELECT COUNT(*)
-                    FROM exam_violations
-                    WHERE session_id = ? AND reason LIKE 'Auto-suspend event:% - Keluar fullscreen atau kehilangan fokus'
-                ");
-                $stmtCount->execute([$sessionId]);
-                $suspensionCount = (int)$stmtCount->fetchColumn();
-                $pdo->commit();
-                echo json_encode([
-                    'success' => true,
-                    'message' => 'Suspend sudah tercatat',
-                    'suspension_count' => $suspensionCount,
-                    'auto_submitted' => $session['submitted_at'] !== null
-                        || in_array($session['status'], ['submitted', 'completed'], true),
-                ]);
-                return;
-            }
-
-            if ($session['submitted_at'] !== null || in_array($session['status'], ['submitted', 'completed'], true)) {
+            $stmtEvent->execute([$sessionId, $eventUuid]);
+            $eventAlreadyLogged = $stmtEvent->fetchColumn() !== false;
+            if (
+                !$eventAlreadyLogged
+                && ($session['submitted_at'] !== null
+                    || in_array($session['status'], ['submitted', 'completed'], true))
+            ) {
                 $pdo->rollBack();
                 http_response_code(409);
                 echo json_encode(['success' => false, 'message' => 'Ujian sudah dikumpulkan']);
                 return;
             }
 
-            $suspensionCount = 0;
+            $eventReason = $reason !== '' ? $reason : 'Pelanggaran ujian';
+            $eventResult = $this->persistViolationEvent(
+                $pdo,
+                (int)$sessionId,
+                (int)$user['id'],
+                $eventUuid,
+                $eventReason
+            );
+            $violationCount = $eventResult['count'];
             $autoSubmitted = false;
-            if (in_array($session['status'], ['active', 'in_progress'], true)) {
-                $stmtViolation = $pdo->prepare("
-                    INSERT INTO exam_violations (session_id, user_id, reason, violation_count, created_at)
-                    VALUES (?, ?, ?, 1, NOW())
-                ");
-                $stmtViolation->execute([$sessionId, $user['id'], $suspensionReason]);
 
-                $stmtCount = $pdo->prepare("
-                    SELECT COUNT(*)
-                    FROM exam_violations
-                    WHERE session_id = ?
-                      AND reason LIKE 'Auto-suspend event:% - Keluar fullscreen atau kehilangan fokus'
-                ");
-                $stmtCount->execute([$sessionId]);
-                $suspensionCount = (int)$stmtCount->fetchColumn();
+            if (in_array($session['status'], ['active', 'in_progress'], true)) {
+                if ($violationCount < self::VIOLATION_LIMIT) {
+                    $pdo->commit();
+                    echo json_encode([
+                        'success' => true,
+                        'message' => 'Violation recorded; suspension threshold not reached',
+                        'violation_count' => $violationCount,
+                        'auto_submitted' => false,
+                    ]);
+                    return;
+                }
 
                 $stmtSuspend = $pdo->prepare("
                     UPDATE exam_sessions
                     SET status = 'suspended',
                         suspended_at = NOW(),
                         suspension_reason = ?,
-                        remaining_time = ?,
-                        violation_count = ?
-                    WHERE id = ?
+                        remaining_time = ?
+                    WHERE id = ? AND submitted_at IS NULL
                 ");
-                $stmtSuspend->execute([$reason !== '' ? $reason : $suspensionReason, $remainingTime, $suspensionCount, $sessionId]);
+                $stmtSuspend->execute([$eventReason, $newRemaining, $sessionId]);
 
-                if ($suspensionCount >= 1) {
-                    $stmtAnswers = $pdo->prepare("
-                        SELECT a.answer, q.correct_answer, q.points, q.type, q.option_scores
-                        FROM answers a
-                        JOIN questions q ON a.question_id = q.id
-                        WHERE a.session_id = ?
-                    ");
-                    $stmtAnswers->execute([$sessionId]);
-
-                    $totalScore = 0;
-                    foreach ($stmtAnswers->fetchAll() as $answer) {
-                        $totalScore += $this->getAnswerScore(
-                            $answer['type'],
-                            $answer['answer'],
-                            $answer['correct_answer'],
-                            $answer['points'],
-                            $answer['option_scores']
-                        );
-                    }
-
-                    $stmtSubmit = $pdo->prepare("
-                        UPDATE exam_sessions
-                        SET status = 'submitted',
-                            submitted_at = NOW(),
-                            score = ?,
-                            is_best_score = 1,
-                            suspension_reason = ?
-                        WHERE id = ? AND submitted_at IS NULL
-                    ");
-                    $stmtSubmit->execute([
-                        $totalScore,
-                        'Auto-submit: pelanggaran suspend pertama',
-                        $sessionId,
-                    ]);
-
-                    $stmtOtherScores = $pdo->prepare("
-                        UPDATE exam_sessions
-                        SET is_best_score = 0
-                        WHERE user_id = ? AND exam_id = ? AND id != ?
-                          AND status IN ('submitted', 'graded', 'completed')
-                    ");
-                    $stmtOtherScores->execute([$user['id'], $session['exam_id'], $sessionId]);
-                    $autoSubmitted = true;
-                }
+                $autoSubmitted = $this->autoSubmitViolationSession(
+                    $pdo,
+                    $session,
+                    (int)$user['id'],
+                    'Auto-submit: pelanggaran sampai batas',
+                    true
+                );
             } elseif ($session['status'] === 'suspended') {
-                $stmtCount = $pdo->prepare("
-                    SELECT COUNT(*)
-                    FROM exam_violations
-                    WHERE session_id = ?
-                      AND reason LIKE 'Auto-suspend event:% - Keluar fullscreen atau kehilangan fokus'
-                ");
-                $stmtCount->execute([$sessionId]);
-                $suspensionCount = (int)$stmtCount->fetchColumn();
+                $autoSubmitted = $session['submitted_at'] !== null;
+            } elseif (in_array($session['status'], ['submitted', 'completed'], true)) {
+                $autoSubmitted = true;
             } else {
                 $pdo->rollBack();
                 http_response_code(409);
@@ -2663,8 +2362,8 @@ class ExamController
             $pdo->commit();
             echo json_encode([
                 'success' => true,
-                'message' => $autoSubmitted ? 'Ujian selesai setelah satu kali suspend' : 'Session suspended',
-                'suspension_count' => $suspensionCount,
+                'message' => $eventResult['inserted'] ? 'Violation recorded' : 'Violation already recorded',
+                'violation_count' => $violationCount,
                 'auto_submitted' => $autoSubmitted,
             ]);
         } catch (Exception $e) {
@@ -2674,6 +2373,153 @@ class ExamController
             error_log("Suspend session error: " . $e->getMessage());
             http_response_code(500);
             echo json_encode(['success' => false, 'message' => 'Failed to suspend session']);
+        }
+    }
+
+    public function addDuration($sessionId = null)
+    {
+        requireAuth();
+        requireRole(['admin', 'guru']);
+
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+            return;
+        }
+
+        if ($sessionId === null) {
+            $sessionId = $_POST['session_id'] ?? null;
+        }
+
+        $additionalMinutes = (int)($_POST['additional_minutes'] ?? 0);
+
+        if (!$sessionId || $additionalMinutes <= 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Data tidak valid']);
+            return;
+        }
+
+        $user = auth();
+
+        try {
+            $pdo = db();
+            $pdo->beginTransaction();
+
+            // Verify session exists and get exam_id + owner
+            $stmt = $pdo->prepare("
+                SELECT es.id, es.exam_id, es.user_id, es.status, es.remaining_time,
+                       e.title as exam_title
+                FROM exam_sessions es
+                JOIN exams e ON e.id = es.exam_id
+                WHERE es.id = ?
+                FOR UPDATE
+            ");
+            $stmt->execute([$sessionId]);
+            $session = $stmt->fetch();
+
+            if (!$session) {
+                $pdo->rollBack();
+                http_response_code(404);
+                echo json_encode(['success' => false, 'message' => 'Sesi ujian tidak ditemukan']);
+                return;
+            }
+
+            // Guru can only extend sessions for exams they created/own
+            if ($user['role'] === 'guru') {
+                $stmtOwn = $pdo->prepare("SELECT created_by FROM exams WHERE id = ?");
+                $stmtOwn->execute([$session['exam_id']]);
+                $examOwner = $stmtOwn->fetch();
+                if (!$examOwner || (int)$examOwner['created_by'] !== (int)$user['id']) {
+                    $pdo->rollBack();
+                    http_response_code(403);
+                    echo json_encode(['success' => false, 'message' => 'Anda tidak memiliki akses ke ujian ini']);
+                    return;
+                }
+            }
+
+            // Only extend active or suspended sessions
+            if (!in_array($session['status'], ['active', 'in_progress', 'suspended'], true)) {
+                $pdo->rollBack();
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Sesi tidak dapat diperpanjang']);
+                return;
+            }
+
+            $addedSeconds = $additionalMinutes * 60;
+            $newRemaining = (int)($session['remaining_time'] ?? 0) + $addedSeconds;
+
+            $stmtUpdate = $pdo->prepare("
+                UPDATE exam_sessions
+                SET remaining_time = ?
+                WHERE id = ? AND submitted_at IS NULL
+            ");
+            $stmtUpdate->execute([$newRemaining, $sessionId]);
+
+            $pdo->commit();
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Durasi berhasil ditambahkan ' . $additionalMinutes . ' menit',
+                'session_id' => (int)$sessionId,
+                'added_minutes' => $additionalMinutes,
+                'new_remaining_time' => $newRemaining,
+            ]);
+        } catch (Exception $e) {
+            if (isset($pdo) && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log("Add duration error: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Gagal menambah durasi: ' . $e->getMessage()]);
+        }
+    }
+
+    public function getRemainingTime($sessionId = null)
+    {
+        requireAuth();
+
+        header('Content-Type: application/json');
+
+        if ($sessionId === null) {
+            $sessionId = $_GET['session_id'] ?? null;
+        }
+
+        if (!$sessionId) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Session ID tidak valid']);
+            return;
+        }
+
+        $user = auth();
+
+        try {
+            $stmt = db()->prepare("
+                SELECT es.id, es.remaining_time, es.status, es.submitted_at
+                FROM exam_sessions es
+                WHERE es.id = ? AND es.user_id = ?
+            ");
+            $stmt->execute([$sessionId, $user['id']]);
+            $session = $stmt->fetch();
+
+            if (!$session) {
+                http_response_code(404);
+                echo json_encode(['success' => false, 'message' => 'Sesi tidak ditemukan']);
+                return;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'session_id' => (int)$session['id'],
+                'remaining_time' => (int)($session['remaining_time'] ?? 0),
+                'status' => $session['status'],
+                'submitted_at' => $session['submitted_at'],
+            ]);
+        } catch (Exception $e) {
+            error_log("Get remaining time error: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Gagal mengambil waktu']);
         }
     }
 
@@ -2687,22 +2533,22 @@ class ExamController
         requireAuth();
         header('Content-Type: application/json');
         header('Cache-Control: no-store, no-cache, must-revalidate');
-    
+
         $user = auth();
-    
+
         $rawIds = $_GET['ids'] ?? $_POST['ids'] ?? '';
         $ids = array_filter(array_map('intval', explode(',', $rawIds)));
-    
+
         if (empty($ids)) {
             echo json_encode(['success' => false, 'message' => 'No exam IDs provided']);
             return;
         }
-    
+
         $ids = array_slice($ids, 0, 50);
-    
+
         try {
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    
+
             // ── calon-siswa: can_access selalu 1 ────────────────────────────
             if ($user['role'] === 'calon-siswa') {
                 $params = array_merge([$user['id']], $ids);
@@ -2729,8 +2575,8 @@ class ExamController
                     FROM exams e
                     WHERE e.id IN ($placeholders)
                 ");
-    
-            // ── siswa biasa: cek exam_participants ───────────────────────────
+
+                // ── siswa biasa: cek exam_participants ───────────────────────────
             } else {
                 $params = array_merge([$user['id'], $user['id']], $ids);
                 $stmt = db()->prepare("
@@ -2762,10 +2608,10 @@ class ExamController
                     WHERE e.id IN ($placeholders)
                 ");
             }
-    
+
             $stmt->execute($params);
             $rows = $stmt->fetchAll();
-    
+
             $result = [];
             foreach ($rows as $row) {
                 $result[$row['id']] = [
@@ -2777,9 +2623,8 @@ class ExamController
                     'end_time'          => $row['end_time'],
                 ];
             }
-    
+
             echo json_encode(['success' => true, 'exams' => $result]);
-    
         } catch (\Exception $e) {
             error_log("statusCheck error: " . $e->getMessage());
             echo json_encode(['success' => false, 'message' => 'Server error']);
@@ -2789,29 +2634,25 @@ class ExamController
     {
         $student = trim($studentAnswer ?? '');
         $correct = trim($correctAnswer ?? '');
-        
+
         if ($student === '' || $correct === '') return false;
-        
+
         if ($type === 'short_answer') {
             if (is_numeric($student) && is_numeric($correct)) {
                 return abs((float)$student - (float)$correct) < 0.0001;
             }
             return strtolower($student) === strtolower($correct);
-    
         } elseif ($type === 'short_answer_text') {
             return strtolower($student) === strtolower($correct);
-    
         } elseif ($type === 'essay') {
             return false;
-    
         } elseif ($type === 'listening') {
             return strtolower($student) === strtolower($correct);
-    
         } else {
             return strtolower($student) === strtolower($correct);
         }
     }
-    
+
     private function getAnswerScore($type, $studentAnswer, $correctAnswer, $points, $optionScores = null)
     {
         if ($type === 'tkp') {
@@ -2820,9 +2661,7 @@ class ExamController
             $scores = is_array($optionScores) ? $optionScores : json_decode($optionScores, true);
             return (int)($scores[$student] ?? 0);
         }
-    
+
         return $this->isAnswerCorrect($type, $studentAnswer, $correctAnswer) ? (int)$points : 0;
     }
-
-    
 }

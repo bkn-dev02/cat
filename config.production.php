@@ -1,29 +1,26 @@
 <?php
-/**
- * Database Configuration - PRODUCTION
- * SMA Unggul Binakasih Nusantara - Hostinger
- */
+require_once __DIR__ . '/env.php';
 
 return [
     // Database Hostinger
-    'db_host' => 'localhost',
-    'db_name' => 'u245247469_catbkn',
-    'db_user' => 'u245247469_enterprise',
-    'db_pass' => '1.SMAUnggul234!!',
-    
+    'db_host' => project_env_value('PROD_DB_HOST', 'localhost'),
+    'db_name' => project_env_value('PROD_DB_DATABASE'),
+    'db_user' => project_env_value('PROD_DB_USERNAME'),
+    'db_pass' => project_env_value('PROD_DB_PASSWORD'),
+
     // E-Learning Database Connection
-    'elearning_db_host' => 'localhost',
-    'elearning_db_name' => 'u245247469_elearning',
-    'elearning_db_user' => 'u245247469_database',
-    'elearning_db_pass' => '1.SMAUnggul234!!',
+    'elearning_db_host' => project_env_value('PROD_ELEARNING_DB_HOST', 'localhost'),
+    'elearning_db_name' => project_env_value('PROD_ELEARNING_DB_DATABASE'),
+    'elearning_db_user' => project_env_value('PROD_ELEARNING_DB_USERNAME'),
+    'elearning_db_pass' => project_env_value('PROD_ELEARNING_DB_PASSWORD'),
 
     // PPDB Database Connection
-    'ppdb_db_host' => 'localhost',
-    'ppdb_db_name' => 'u245247469_ppdb_bkn',
-    'ppdb_db_user' => 'u245247469_smaunggul', // user khusus database PPDB
-    'ppdb_db_pass' => '1.SMAUnggul234!!',
-    
+    'ppdb_db_host' => project_env_value('PROD_PPDB_DB_HOST', 'localhost'),
+    'ppdb_db_name' => project_env_value('PROD_PPDB_DB_DATABASE'),
+    'ppdb_db_user' => project_env_value('PROD_PPDB_DB_USERNAME'),
+    'ppdb_db_pass' => project_env_value('PROD_PPDB_DB_PASSWORD'),
+
     // App
     'app_name' => 'CAT Enterprise',
-    'app_url' => 'https://cat-enterprise.binakasihnusantara.sch.id',
+    'app_url' => project_env_value('PROD_APP_URL', 'https://cat-enterprise.binakasihnusantara.sch.id'),
 ];
