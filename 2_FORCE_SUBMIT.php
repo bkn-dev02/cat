@@ -328,7 +328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['force_submit_session_
                 ];
 
             } else {
-                // ── FORCE SUBMIT: set completed + bersihkan pelanggaran ──────
+                // ── FORCE SUBMIT: keep violation history and sync its summary ─
                 $pdo->prepare("
                                 UPDATE exam_sessions
                                 SET status              = 'completed',
@@ -337,16 +337,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['force_submit_session_
                                     score               = ?,
                                     is_best_score       = 1,
                                     remaining_time      = 0,
-                                    violation_count     = 0,
+                                    violation_count     = (SELECT COUNT(*) FROM exam_violations WHERE session_id = ?),
                                     suspension_reason   = NULL,
                                     suspended_at        = NULL
                                     -- force_submitted dan force_submitted_at dihapus karena kolom belum ada di DB
                                 WHERE id = ? AND user_id = ?
-                            ")->execute([$scoreData['score'], $sid, $user['id']]);
-
-                // Hapus log pelanggaran
-                $pdo->prepare("DELETE FROM exam_violations WHERE session_id = ?")
-                    ->execute([$sid]);
+                            ")->execute([$scoreData['score'], $sid, $sid, $user['id']]);
 
                 $examTitle    = htmlspecialchars($target['title'] ?? '');
                 $strategyNote = buildStrategyNote($scoreData);

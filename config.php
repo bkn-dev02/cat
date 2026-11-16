@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/env.php';
+
 /**
  * Database Configuration - AUTO DETECT ENVIRONMENT
  * 
@@ -16,7 +18,7 @@ if (!defined('ENVIRONMENT')) {
     if ($environment === false || $environment === '') {
         $serverAddress = $_SERVER['SERVER_ADDR'] ?? '';
         $httpHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_HOST) ?: '';
-        $localServerAddresses = ['127.0.0.1', '::1', '10.18.31.88'];
+        $localServerAddresses = ['127.0.0.1', '::1'];
         $localHttpHosts = ['localhost', '127.0.0.1', '::1'];
         $environment = in_array($serverAddress, $localServerAddresses, true)
             || in_array(strtolower($httpHost), $localHttpHosts, true)
@@ -49,5 +51,9 @@ $config = require $configFile;
 
 // Tambahkan info environment ke config
 $config['environment'] = ENVIRONMENT;
+$config['app_debug'] = filter_var(
+    project_env_value('APP_DEBUG', ENVIRONMENT === 'local' ? 'true' : 'false'),
+    FILTER_VALIDATE_BOOLEAN
+);
 
 return $config;

@@ -62,6 +62,7 @@ try {
         CREATE TABLE IF NOT EXISTS exam_violations (
             id INT AUTO_INCREMENT PRIMARY KEY,
             session_id INT NOT NULL,
+            event_uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
             user_id INT NOT NULL,
             reason VARCHAR(255) NOT NULL,
             violation_count INT NOT NULL,
@@ -70,18 +71,51 @@ try {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_session (session_id),
             INDEX idx_user (user_id),
-            INDEX idx_created (created_at)
+            INDEX idx_created (created_at),
+            UNIQUE KEY uq_exam_violations_session_event (session_id, event_uuid)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $eventUuidColumn = $db->query("SHOW COLUMNS FROM exam_violations LIKE 'event_uuid'")->fetch();
+    if (!$eventUuidColumn) {
+        $db->exec("
+            ALTER TABLE exam_violations
+            ADD COLUMN event_uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL
+            AFTER session_id
+        ");
+    }
+
+    $indexes = $db->query("SHOW INDEX FROM exam_violations")->fetchAll();
+    $hasEventIndex = false;
+    foreach ($indexes as $index) {
+        if ($index['Key_name'] === 'uq_exam_violations_session_event') {
+            $hasEventIndex = true;
+            break;
+        }
+    }
+    if (!$hasEventIndex) {
+        $db->exec("
+            ALTER TABLE exam_violations
+            ADD UNIQUE KEY uq_exam_violations_session_event (session_id, event_uuid)
+        ");
+    }
     
     echo "<div class='success'>✅ Tabel exam_violations berhasil dibuat</div>";
     
     echo "<div class='step'><strong>Step 3:</strong> Update existing sessions...</div>";
     
-    // Update existing sessions
-    $stmt = $db->exec("UPDATE exam_sessions SET violation_count = 0 WHERE violation_count IS NULL");
+    $updated = $db->exec("
+        UPDATE exam_sessions es
+        LEFT JOIN (
+            SELECT session_id, COUNT(*) AS history_count
+            FROM exam_violations
+            GROUP BY session_id
+        ) v ON v.session_id = es.id
+        SET es.violation_count = COALESCE(v.history_count, 0)
+        WHERE NOT (es.violation_count <=> COALESCE(v.history_count, 0))
+    ");
     
-    echo "<div class='success'>✅ Existing sessions berhasil diupdate</div>";
+    echo "<div class='success'>✅ Ringkasan pelanggaran disinkronkan pada {$updated} sesi</div>";
     
     // Summary
     echo "<div class='success' style='margin-top: 30px; font-size: 18px;'>";

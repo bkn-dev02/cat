@@ -7,6 +7,9 @@ ini_set('display_errors', 1);
 if (!isset($session) || !isset($questions)) {
     die('Error: Data ujian tidak tersedia. Silakan hubungi administrator.');
 }
+
+// Jika sesi suspended (setelah admin reset), tampilkan tombol Resume, jangan jalankan timer
+$isSuspended = ($session['status'] ?? '') === 'suspended';
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -551,12 +554,31 @@ if (!isset($session) || !isset($questions)) {
 </head>
 
 <body>
+    <?php if ($isSuspended): ?>
+        <div style="position:fixed; inset:0; z-index:9999999; background:rgba(15,23,42,.96); align-items:center; justify-content:center; flex-direction:column;">
+            <div style="background: white; padding: 40px; border-radius: 15px; text-align: center; max-width: 600px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+                <div style="font-size: 80px; margin-bottom: 20px;">⏸️</div>
+                <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 28px;">Ujian Diteduhkan (Suspended)</h2>
+                <p style="margin-bottom: 30px; font-size: 18px; color: #7f8c8d; line-height: 1.6;">
+                    Sisa durasi ujian Anda telah disimpan. Countdown tidak berjalan sampai Anda menekan tombol di bawah untuk melanjutkan.
+                </p>
+                <a href="<?= function_exists('config') ? config('app_url') : '' ?>/exam/start/<?= $session['exam_id'] ?>"
+                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 20px 60px; font-size: 20px; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); text-decoration: none; display: inline-block;">
+                    Mulai Ujian / Resume
+                </a>
+                <p style="margin-top: 20px; font-size: 14px; color: #95a5a6;">
+                    Waktu yang sudah digunakan tidak akan dikurangi selama menunggu resume.
+                </p>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div id="mobile-warning">
         ⚠️ JANGAN KELUAR DARI BROWSER! Pelanggaran: <span id="warning-count">0</span>/3
     </div>
 
-    <!-- [FIX-FS] Layar penghalang fullscreen: tampil otomatis bila browser menolak fullscreen tanpa klik -->
-    <div id="fullscreen-prompt" style="display:none; position:fixed; inset:0; z-index:9999999; background:rgba(15,23,42,.96); align-items:center; justify-content:center;">
+    <!-- [FIX-FS] Layar penghalang fullscreen -->
+    <div id="fullscreen-prompt" style="display:<?= $isSuspended ? 'none' : 'flex' ?>; position:fixed; inset:0; z-index:9999999; background:rgba(15,23,42,.96); align-items:center; justify-content:center;">
         <div style="background: white; padding: 50px; border-radius: 15px; text-align: center; max-width: 600px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
             <div style="font-size: 80px; margin-bottom: 20px;">🖥️</div>
             <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 28px;">Mode Fullscreen Diperlukan</h2>
@@ -577,15 +599,15 @@ if (!isset($session) || !isset($questions)) {
         🚨 Pelanggaran: <span id="violation-count">0</span>/1
     </div>
 
-    <div class="timer" id="timer">
+    <div class="timer" id="timer" style="display:none;">
         ⏱️ <span id="time-display">--:--</span> <small style="font-size: 0.8em; opacity: 0.8;">WIB</small>
     </div>
 
-    <div class="exam-info">
+    <div class="exam-info" style="display:none;">
         📝 <?= htmlspecialchars($session['title'] ?? 'Ujian') ?>
     </div>
 
-    <div class="main-container">
+    <div class="main-container" style="display:none;">
         <?php
         // === TAMBAHAN: Bangun peta PDF per nomor soal (bukan cuma 1 PDF untuk semua soal) ===
         $questionPdfMap = [];      // [nomor_soal => url_pdf]
@@ -792,7 +814,7 @@ if (!isset($session) || !isset($questions)) {
                                         value="<?= htmlspecialchars($answers[$q['id']] ?? '') ?>"
                                         style="width:100%;max-width:500px;padding:12px 16px;border:2px solid #e2e8f0;border-radius:8px;font-size:16px;color:#1e293b;transition:border-color 0.2s;box-sizing:border-box"
                                         onfocus="this.style.borderColor='#6366f1'"
-                                        onblur="this.style.borderColor='#e2e8f0'"
+                                        onblur="this.style.borderColor='#e2e8f0'; saveShortAnswerText(<?= $q['id'] ?? 0 ?>, this.value, <?= $no ?>)"
                                         oninput="saveShortAnswerText(<?= $q['id'] ?? 0 ?>, this.value, <?= $no ?>)">
                                     <div style="margin-top:8px;color:#64748b;font-size:13px">
                                         <i class="fas fa-info-circle"></i> Ketik jawaban kalimat, tersimpan otomatis
@@ -952,11 +974,10 @@ if (!isset($session) || !isset($questions)) {
         </div>
     </div>
 
-    <button class="btn btn-success submit-btn" onclick="submitExam()">
+    <button class="btn btn-success submit-btn" onclick="submitExam()" style="display:none;">
         <i class="fas fa-paper-plane"></i> Kumpulkan Ujian
     </button>
 
-    <!-- SEMUA JAVASCRIPT ASLI ANDA TETAP DIPERTAHANKAN DI BAWAH INI -->
     <script>
         // Safe variable initialization
         const sessionId = <?= isset($session['id']) ? (int)$session['id'] : 0 ?>;
@@ -1066,9 +1087,6 @@ if (!isset($session) || !isset($questions)) {
 
         let antiCheatReady = false;
 
-        // ==========================================================
-        // [FIX-FS] HELPER FULLSCREEN
-        // ==========================================================
         function isInFullscreen() {
             return !!(document.fullscreenElement || document.webkitFullscreenElement ||
                 document.mozFullScreenElement || document.msFullscreenElement);
@@ -1092,7 +1110,6 @@ if (!isset($session) || !isset($questions)) {
             return Promise.resolve(p).then(lockEscapeKey).catch(function() {});
         }
 
-        // Keyboard Lock: hanya jalan di HTTPS/localhost; di http biasa otomatis diabaikan.
         function lockEscapeKey() {
             try {
                 if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock(['Escape']);
@@ -1120,7 +1137,6 @@ if (!isset($session) || !isset($questions)) {
         }
 
         // Coba fullscreen langsung saat masuk ujian. Jika browser menolak (butuh klik),
-        // tampilkan layar penghalang dengan satu tombol.
         function ensureFullscreenOnEntry() {
             if (!fullscreenSupported()) return; // mis. iPhone: jangan mengunci peserta
             requestFullscreen();
@@ -1308,10 +1324,11 @@ if (!isset($session) || !isset($questions)) {
 
         // [FIX-FS] Masuk ujian langsung coba fullscreen; bila ditolak browser -> layar penghalang
         document.addEventListener('DOMContentLoaded', function() {
-            ensureFullscreenOnEntry();
-            setTimeout(function() {
-                antiCheatReady = true;
-            }, 2500);
+            antiCheatReady = false;
+            if (isInFullscreen()) {
+                unlockExam();
+                hideFullscreenGate();
+            }
         });
 
         window.addEventListener('pageshow', function(event) {
@@ -1320,15 +1337,16 @@ if (!isset($session) || !isset($questions)) {
             }
         });
 
-        setTimeout(function() {
-            antiCheatReady = true;
-        }, 3000);
-
         document.addEventListener('visibilitychange', function() {
             if (!antiCheatReady || isSubmitting) return;
             if (document.hidden) {
                 recordViolation('Berpindah tab/aplikasi');
             }
+        });
+
+        window.addEventListener('blur', function() {
+            if (!antiCheatReady || isSubmitting) return;
+            recordViolation('Keluar window/fokus');
         });
 
         function markEssayAnswered(questionId, value, questionNum) {
@@ -1435,6 +1453,7 @@ if (!isset($session) || !isset($questions)) {
         }
 
         let timerInterval;
+        let syncTimerInterval;
         let lastSavedTime = remainingTime;
 
         function updateTimer() {
@@ -1472,6 +1491,25 @@ if (!isset($session) || !isset($questions)) {
             });
         }
 
+        function syncTimerFromServer() {
+            const baseUrl = '<?= function_exists('config') ? config('app_url') : '' ?>';
+            fetch(`${baseUrl}/exam/getRemainingTime/${sessionId}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.remaining_time !== undefined) {
+                        const serverTime = parseInt(data.remaining_time, 10) || 0;
+                        if (serverTime !== remainingTime && serverTime >= 0) {
+                            remainingTime = serverTime;
+                            lastSavedTime = remainingTime;
+                            document.getElementById('time-display').textContent =
+                                String(Math.floor(remainingTime / 60)).padStart(2, '0') + ':' +
+                                String(remainingTime % 60).padStart(2, '0');
+                        }
+                    }
+                })
+                .catch(() => {});
+        }
+
         window.addEventListener('beforeunload', function(e) {
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '<?= function_exists('config') ? config('app_url') : '' ?>/exam/saveTime', false);
@@ -1481,9 +1519,6 @@ if (!isset($session) || !isset($questions)) {
                 remaining_time: remainingTime
             }));
         });
-
-        timerInterval = setInterval(updateTimer, 1000);
-        updateTimer();
 
         function goToQuestion(questionNum) {
             if (questionNum < 1 || questionNum > totalQuestions) return;
@@ -1853,9 +1888,6 @@ if (!isset($session) || !isset($questions)) {
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            updateNavigationDisplay();
-            updateDoubtButton();
-            goToQuestion(1);
 
             setTimeout(function() {
                 function tryRender(attempt) {
@@ -1881,8 +1913,48 @@ if (!isset($session) || !isset($questions)) {
             const fullscreenBtn = document.getElementById('start-fullscreen-btn');
             if (fullscreenBtn) {
                 fullscreenBtn.addEventListener('click', function() {
-                    requestFullscreen().then(hideFullscreenGate);
+                    requestFullscreen().then(function() {
+                        hideFullscreenGate();
+                        unlockExam();
+                    }).catch(function() {
+                        console.log('Fullscreen request denied by browser');
+                    });
                 });
+            }
+
+            function lockExam() {
+                var elTimer = document.getElementById('timer');
+                var elInfo = document.querySelector('.exam-info');
+                var elMain = document.querySelector('.main-container');
+                var elSubmit = document.querySelector('.submit-btn');
+                if (elTimer) elTimer.style.display = 'none';
+                if (elInfo) elInfo.style.display = 'none';
+                if (elMain) elMain.style.display = 'none';
+                if (elSubmit) elSubmit.style.display = 'none';
+                var gate = document.getElementById('fullscreen-prompt');
+                if (gate) gate.style.display = 'flex';
+                antiCheatReady = false;
+                if (timerInterval) clearInterval(timerInterval);
+                if (syncTimerInterval) clearInterval(syncTimerInterval);
+            }
+
+            function unlockExam() {
+                var elTimer = document.getElementById('timer');
+                var elInfo = document.querySelector('.exam-info');
+                var elMain = document.querySelector('.main-container');
+                var elSubmit = document.querySelector('.submit-btn');
+                if (elTimer) elTimer.style.display = '';
+                if (elInfo) elInfo.style.display = '';
+                if (elMain) elMain.style.display = '';
+                if (elSubmit) elSubmit.style.display = '';
+                antiCheatReady = true;
+                timerInterval = setInterval(updateTimer, 1000);
+                syncTimerInterval = setInterval(syncTimerFromServer, 5000);
+                syncTimerFromServer();
+                updateTimer();
+                updateNavigationDisplay();
+                updateDoubtButton();
+                goToQuestion(1);
             }
 
             document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -1935,6 +2007,13 @@ if (!isset($session) || !isset($questions)) {
                     return false;
                 }
 
+                if (e.key === 'Meta' || e.key === 'OS') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    recordViolation('Tekan tombol Windows');
+                    return false;
+                }
+
                 if (e.key === 'ArrowLeft' && currentQuestion > 1) previousQuestion();
                 else if (e.key === 'ArrowRight' && currentQuestion < totalQuestions) nextQuestion();
             });
@@ -1942,8 +2021,6 @@ if (!isset($session) || !isset($questions)) {
 
         history.pushState(null, null, location.href);
         window.onpopstate = function() {
-            // Cegah navigasi mundur selama ujian berlangsung
-            // Tapi tidak terpicu setelah submit (karena onpopstate di-clear di finishExam)
             if (!isSubmitting) {
                 history.go(1);
             }
@@ -1955,10 +2032,12 @@ if (!isset($session) || !isset($questions)) {
                 isFullscreen = true;
                 hideViolationWarning();
                 hideFullscreenGate();
+                unlockExam();
             } else {
                 isFullscreen = false;
                 if (!isSubmitting) {
                     recordViolation('Keluar dari fullscreen');
+                    lockExam();
                     requestFullscreen();
                     setTimeout(() => {
                         if (!isSubmitting && !isFullscreen) requestFullscreen();
@@ -1989,6 +2068,21 @@ if (!isset($session) || !isset($questions)) {
             }, 5000);
         }
 
+        function createViolationEventUuid() {
+            const bytes = new Uint8Array(16);
+            if (window.crypto && window.crypto.getRandomValues) {
+                window.crypto.getRandomValues(bytes);
+            } else {
+                for (let i = 0; i < bytes.length; i++) {
+                    bytes[i] = Math.floor(Math.random() * 256);
+                }
+            }
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+            return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+        }
+
         function recordViolation(reason) {
             if (isSubmitting || violationCount >= maxViolations) return;
 
@@ -2003,21 +2097,13 @@ if (!isset($session) || !isset($questions)) {
             if (violationCounterEl) violationCounterEl.style.display = 'block';
             if (mobileWarningEl) mobileWarningEl.style.display = 'block';
 
-            fetch('<?= function_exists('config') ? config('app_url') : '' ?>/exam/logViolation', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: `session_id=${sessionId}&reason=${encodeURIComponent(reason)}&count=${violationCount}`
-            }).catch(err => console.error('Failed to log violation:', err));
-
             if (violationCount >= maxViolations) {
                 isSubmitting = true;
-                suspendAndSubmitExam();
+                suspendAndSubmitExam(createViolationEventUuid(), reason);
             }
         }
 
-        function suspendAndSubmitExam() {
+        function suspendAndSubmitExam(eventUuid, reason) {
             if (timerInterval) clearInterval(timerInterval);
 
             const suspendDiv = document.createElement('div');
@@ -2060,17 +2146,27 @@ if (!isset($session) || !isset($questions)) {
                 console.error('XHR saveTime gagal:', e);
             }
 
-            setTimeout(function() {
+            function reportSuspension() {
+                const retryButton = document.getElementById('retry-suspension');
+                if (retryButton) retryButton.disabled = true;
                 statusEl().textContent = '⏳ Menyimpan status pelanggaran...';
                 fetch(baseUrl + '/exam/suspendSession', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
+                            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
                         },
-                        body: 'session_id=' + sessionId + '&reason=' + encodeURIComponent('Pelanggaran: keluar fullscreen/berpindah tab') + '&remaining_time=' + remainingTime
+                        body: new URLSearchParams({
+                            session_id: String(sessionId),
+                            event_uuid: eventUuid,
+                            reason: reason,
+                            remaining_time: String(Math.max(0, Math.floor(remainingTime)))
+                        }).toString()
                     })
-                    .then(r => r.json().catch(() => ({})))
-                    .then(data => {
+                    .then(async r => {
+                        const data = await r.json().catch(() => ({}));
+                        if (!r.ok || !data.success) {
+                            throw new Error(data.message || `Pencatatan pelanggaran gagal (HTTP ${r.status})`);
+                        }
                         statusEl().textContent = '⏳ Mengumpulkan jawaban...';
                         const formData = new FormData();
                         formData.append('session_id', sessionId);
@@ -2102,12 +2198,21 @@ if (!isset($session) || !isset($questions)) {
                         }, 4000);
                     })
                     .catch(err => {
-                        statusEl().innerHTML = '<span style="color:#e74c3c;">Error: ' + err.message + '</span><br><small style="color:#7f8c8d">Mengalihkan dalam 8 detik...</small>';
-                        setTimeout(() => {
-                            finishExam(baseUrl + '/exam/result/' + sessionId);
-                        }, 8000);
+                        statusEl().textContent = 'Gagal mencatat pelanggaran atau mengumpulkan ujian: ' + err.message;
+                        let button = document.getElementById('retry-suspension');
+                        if (!button) {
+                            button = document.createElement('button');
+                            button.id = 'retry-suspension';
+                            button.textContent = 'Coba lagi';
+                            button.style.cssText = 'margin-top:16px;padding:12px 24px;border:0;border-radius:8px;background:#c0392b;color:white;font-size:16px;cursor:pointer';
+                            suspendDiv.querySelector('div').appendChild(button);
+                        }
+                        button.onclick = reportSuspension;
+                        button.disabled = false;
                     });
-            }, 1000);
+            }
+
+            setTimeout(reportSuspension, 1000);
         }
 
         function showViolationWarning(message) {
@@ -2498,7 +2603,7 @@ if (!isset($session) || !isset($questions)) {
                     document.getElementById('pdf-page-count').textContent = cached.numPages;
                     currentPage = 1;
                     setPanelState('ready');
-                    fitToWidth(); // ← ganti juga di sini
+                    fitToWidth();
                 } else if (cached && cached.failed) {
                     showPanelError('Gagal memuat PDF. Hubungi pengawas ujian.');
                 } else if (cached && cached.loading) {

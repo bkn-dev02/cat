@@ -635,6 +635,48 @@ if ($forceTabPpdb && $activeTab !== 'ppdb') {
             <?php endforeach; ?>
         </div>
 
+        <!-- Pagination -->
+        <?php if ($totalPages > 1): ?>
+        <nav style="margin-top:2rem; display:flex; justify-content:center; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <div style="font-size:0.875rem; color:#64748b; white-space:nowrap;">
+                Halaman <strong><?= htmlspecialchars($page) ?></strong> dari <strong><?= htmlspecialchars($totalPages) ?></strong> (<?= htmlspecialchars($totalExams) ?> ujian)
+            </div>
+
+            <?php if ($page > 1): ?>
+                <a href="<?= config('app_url') ?>/exam?tab=<?= htmlspecialchars($activeTab) ?>&amp;page=<?= $page - 1 ?>" class="btn" style="padding:0.5rem 1rem; background:var(--primary); color:white; border:none; border-radius:0.5rem; font-weight:600; text-decoration:none;">&larr; Sebelumnya</a>
+            <?php else: ?>
+                <span style="padding:0.5rem 1rem; color:#cbd5e1; border-radius:0.5rem;">&larr; Sebelumnya</span>
+            <?php endif; ?>
+
+            <?php
+            $start = max(1, $page - 2);
+            $end   = min($totalPages, $page + 2);
+            if ($start > 1): ?>
+                <a href="<?= config('app_url') ?>/exam?tab=<?= htmlspecialchars($activeTab) ?>&amp;page=1" class="btn" style="padding:0.5rem 1rem; background:var(--primary); color:white; border:none; border-radius:0.5rem; font-weight:600; text-decoration:none;">1</a>
+                <?php if ($start > 2): ?><span style="color:#94a3b8;">…</span><?php endif; ?>
+            <?php endif; ?>
+
+            <?php for ($i = $start; $i <= $end; $i++): ?>
+                <?php if ($i === $page): ?>
+                    <span style="padding:0.5rem 1rem; background:#f1f5f9; color:#1e293b; border:1px solid var(--primary); border-radius:0.5rem; font-weight:700;"><?= $i ?></span>
+                <?php else: ?>
+                    <a href="<?= config('app_url') ?>/exam?tab=<?= htmlspecialchars($activeTab) ?>&amp;page=<?= $i ?>" class="btn" style="padding:0.5rem 1rem; background:#f8fafc; color:#475569; border:1px solid var(--border); border-radius:0.5rem; font-weight:600; text-decoration:none;"><?= $i ?></a>
+                <?php endif; ?>
+            <?php endfor; ?>
+
+            <?php if ($end < $totalPages): ?>
+                <?php if ($end < $totalPages - 1): ?><span style="color:#94a3b8;">…</span><?php endif; ?>
+                <a href="<?= config('app_url') ?>/exam?tab=<?= htmlspecialchars($activeTab) ?>&amp;page=<?= $totalPages ?>" class="btn" style="padding:0.5rem 1rem; background:var(--primary); color:white; border:none; border-radius:0.5rem; font-weight:600; text-decoration:none;"><?= $totalPages ?></a>
+            <?php endif; ?>
+
+            <?php if ($page < $totalPages): ?>
+                <a href="<?= config('app_url') ?>/exam?tab=<?= htmlspecialchars($activeTab) ?>&amp;page=<?= $page + 1 ?>" class="btn" style="padding:0.5rem 1rem; background:var(--primary); color:white; border:none; border-radius:0.5rem; font-weight:600; text-decoration:none;">Selanjutnya &rarr;</a>
+            <?php else: ?>
+                <span style="padding:0.5rem 1rem; color:#cbd5e1; border-radius:0.5rem;">Selanjutnya &rarr;</span>
+            <?php endif; ?>
+        </nav>
+        <?php endif; ?>
+
         <!-- Modal Preview Soal -->
         <div id="previewModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; overflow-y:auto;">
             <div style="background:white; max-width:800px; margin:2rem auto; border-radius:1rem; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.3);">

@@ -1,32 +1,12 @@
-<?php
-// Default aman supaya view tetap jalan sebelum controller diubah
-$page       = $page       ?? 1;
-$totalPages = $totalPages ?? 1;
-$totalExams = $totalExams ?? count($exams ?? []);
-$perPage    = $perPage    ?? 25;
-
-$baseUrl = config('app_url') . '/exam/monitor';
-$from    = $totalExams > 0 ? (($page - 1) * $perPage) + 1 : 0;
-$to      = min($page * $perPage, $totalExams);
-
-// Daftar halaman dengan elipsis: 1 ... 4 5 [6] 7 8 ... 20
-$pages = [];
-for ($i = 1; $i <= $totalPages; $i++) {
-    if ($i === 1 || $i === $totalPages || abs($i - $page) <= 2) {
-        $pages[] = $i;
-    } elseif (end($pages) !== '...') {
-        $pages[] = '...';
-    }
-}
-?>
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitor Ujian - CAT System</title>
-    <link href="<?= asset_url('vendor/bootstrap/5.3.0/dist/css/bootstrap.min.css') ?>" rel="stylesheet">
-    <link href="<?= asset_url('vendor/fontawesome/6.0.0/css/all.min.css') ?>" rel="stylesheet">
+    <link href="<?= $bootstrapCssUrl ?>" rel="stylesheet">
+    <link href="<?= $fontAwesomeCssUrl ?>" rel="stylesheet">
     <style>
         :root {
             --primary: #2563eb;
@@ -43,7 +23,9 @@ for ($i = 1; $i <= $totalPages; $i++) {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        .main-content { padding: 2rem 0; }
+        .main-content {
+            padding: 2rem 0;
+        }
 
         .btn-back {
             display: inline-flex;
@@ -60,9 +42,10 @@ for ($i = 1; $i <= $totalPages; $i++) {
             font-size: .875rem;
             transition: background-color 0.3s ease, color 0.3s ease;
         }
-        .btn-back:hover { 
-            background: #1d4ed8; 
-            color: #fff; 
+
+        .btn-back:hover {
+            background: #1d4ed8;
+            color: #fff;
         }
 
         .page-header {
@@ -82,8 +65,18 @@ for ($i = 1; $i <= $totalPages; $i++) {
             grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 1.25rem;
         }
-        @media (max-width: 991.98px) { .exam-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-        @media (max-width: 575.98px) { .exam-grid { grid-template-columns: 1fr; } }
+
+        @media (max-width: 991.98px) {
+            .exam-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 575.98px) {
+            .exam-grid {
+                grid-template-columns: 1fr;
+            }
+        }
 
         /* ===== Card ===== */
         .exam-card {
@@ -97,12 +90,17 @@ for ($i = 1; $i <= $totalPages; $i++) {
             box-shadow: 0 2px 10px rgba(0, 0, 0, .05);
             transition: box-shadow .2s ease, transform .2s ease;
         }
+
         .exam-card:hover {
             transform: translateY(-3px);
             box-shadow: 0 8px 24px rgba(0, 0, 0, .1);
         }
 
-        .exam-head { flex: 1; }   /* mendorong statistik + tombol ke bawah */
+        .exam-head {
+            flex: 1;
+        }
+
+        /* mendorong statistik + tombol ke bawah */
 
         .exam-title-row {
             display: flex;
@@ -110,6 +108,7 @@ for ($i = 1; $i <= $totalPages; $i++) {
             align-items: flex-start;
             gap: .5rem;
         }
+
         .exam-title {
             margin: 0;
             font-size: 1rem;
@@ -121,6 +120,7 @@ for ($i = 1; $i <= $totalPages; $i++) {
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
+
         .exam-duration {
             flex-shrink: 0;
             padding: .2rem .55rem;
@@ -131,6 +131,7 @@ for ($i = 1; $i <= $totalPages; $i++) {
             font-weight: 600;
             white-space: nowrap;
         }
+
         .exam-time {
             margin: .5rem 0 0;
             font-size: .8125rem;
@@ -144,6 +145,7 @@ for ($i = 1; $i <= $totalPages; $i++) {
             gap: .5rem;
             margin: 1rem 0;
         }
+
         .stat-item {
             text-align: center;
             padding: .6rem .5rem;
@@ -151,8 +153,18 @@ for ($i = 1; $i <= $totalPages; $i++) {
             border: 1px solid #eef2f7;
             border-radius: 10px;
         }
-        .stat-number { display: block; font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
-        .stat-label  { font-size: .75rem; color: var(--muted); }
+
+        .stat-number {
+            display: block;
+            font-size: 1.25rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            font-size: .75rem;
+            color: var(--muted);
+        }
 
         /* ===== Tombol selalu di bawah ===== */
         .btn-monitor {
@@ -168,7 +180,11 @@ for ($i = 1; $i <= $totalPages; $i++) {
             font-size: .875rem;
             transition: background .2s ease;
         }
-        .btn-monitor:hover { background: #1d4ed8; color: #fff; }
+
+        .btn-monitor:hover {
+            background: #1d4ed8;
+            color: #fff;
+        }
 
         /* ===== Pagination ===== */
         .pager-wrap {
@@ -178,9 +194,21 @@ for ($i = 1; $i <= $totalPages; $i++) {
             gap: .5rem;
             margin-top: 1.75rem;
         }
-        .pager-info { font-size: .8125rem; color: var(--muted); }
-        .pager { display: flex; flex-wrap: wrap; justify-content: center; gap: .35rem; }
-        .pager a, .pager span {
+
+        .pager-info {
+            font-size: .8125rem;
+            color: var(--muted);
+        }
+
+        .pager {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: .35rem;
+        }
+
+        .pager a,
+        .pager span {
             min-width: 38px;
             padding: .4rem .7rem;
             text-align: center;
@@ -191,21 +219,56 @@ for ($i = 1; $i <= $totalPages; $i++) {
             font-size: .875rem;
             text-decoration: none;
         }
-        .pager a:hover { background: #f3f4f6; }
-        .pager .active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
-        .pager .disabled { color: #9ca3af; background: #f9fafb; }
 
-        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); background: #fff; border-radius: 14px; }
-        .empty-state i { font-size: 3.5rem; margin-bottom: 1rem; opacity: .5; }
+        .pager a:hover {
+            background: #f3f4f6;
+        }
 
-        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+        .pager .active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .pager .disabled {
+            color: #9ca3af;
+            background: #f9fafb;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--muted);
+            background: #fff;
+            border-radius: 14px;
+        }
+
+        .empty-state i {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            opacity: .5;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .5;
+            }
+        }
     </style>
 </head>
+
 <body>
     <?php include VIEW_PATH . '/partials/navbar.php'; ?>
 
     <div class="container main-content">
-        <a href="<?= config('app_url') ?>/exam" class="btn-back">
+        <a href="<?= $appUrl ?>/exam" class="btn-back">
             <i class="fas fa-arrow-left"></i> Kembali ke Daftar Ujian
         </a>
 
@@ -220,13 +283,13 @@ for ($i = 1; $i <= $totalPages; $i++) {
                     <div style="width:8px; height:8px; background:#28a745; border-radius:50%; animation:pulse 2s infinite;"></div>
                     <span style="color:#28a745; font-weight:600; font-size:14px;">System Online &amp; Ready</span>
                     <span style="color:#6c757d; font-size:12px; margin-left:auto;">
-                        Last checked: <span id="last-check"><?= date('H:i:s') ?></span>
+                        Last checked: <span id="last-check"><?= $lastCheck ?></span>
                     </span>
                 </div>
             </div>
         </div>
 
-        <?php if (empty($exams)): ?>
+        <?php if (!$hasExams): ?>
             <div class="empty-state">
                 <i class="fas fa-desktop"></i>
                 <h3>Belum ada ujian aktif</h3>
@@ -235,11 +298,7 @@ for ($i = 1; $i <= $totalPages; $i++) {
         <?php else: ?>
 
             <div class="exam-grid">
-                <?php foreach ($exams as $exam):
-                    // TODO: data sementara, ganti setelah logika controller dibuat
-                    $total      = $exam['total_participants'] ?? $exam['total_sessions'];
-                    $notStarted = $exam['not_started_count'] ?? 0;
-                ?>
+                <?php foreach ($exams as $exam): ?>
                     <div class="exam-card">
                         <div class="exam-head">
                             <div class="exam-title-row">
@@ -247,46 +306,46 @@ for ($i = 1; $i <= $totalPages; $i++) {
                                     <?= htmlspecialchars($exam['title']) ?>
                                 </h4>
                                 <span class="exam-duration">
-                                    <i class="far fa-clock"></i> <?= (int)$exam['duration'] ?> mnt
+                                    <i class="far fa-clock"></i> <?= $exam['duration'] ?> mnt
                                 </span>
                             </div>
                             <p class="exam-time">
                                 <i class="far fa-calendar"></i>
-                                <?= formatWaktuIndonesia($exam['start_time'], 'lengkap') ?>
+                                <?= $exam['formatted_start_time'] ?>
                             </p>
                         </div>
 
                         <div class="stats-grid">
                             <div class="stat-item">
-                                <span class="stat-number" style="color:var(--dark);"><?= (int)$total ?></span>
+                                <span class="stat-number" style="color:var(--dark);"><?= $exam['total_count'] ?></span>
                                 <span class="stat-label">Total peserta</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-number" style="color:var(--success);"><?= (int)$exam['active_count'] ?></span>
+                                <span class="stat-number" style="color:var(--success);"><?= $exam['active_count'] ?></span>
                                 <span class="stat-label">Sedang ujian</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-number" style="color:var(--warning);"><?= (int)$notStarted ?></span>
+                                <span class="stat-number" style="color:var(--warning);"><?= $exam['not_started_count'] ?></span>
                                 <span class="stat-label">Belum ujian</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-number" style="color:var(--primary);"><?= (int)$exam['submitted_count'] ?></span>
+                                <span class="stat-number" style="color:var(--primary);"><?= $exam['submitted_count'] ?></span>
                                 <span class="stat-label">Sudah submit</span>
                             </div>
                         </div>
 
-                        <a href="<?= config('app_url') ?>/exam/monitor/<?= (int)$exam['id'] ?>" class="btn-monitor">
+                        <a href="<?= $appUrl ?>/exam/monitor/<?= $exam['id'] ?>" class="btn-monitor">
                             <i class="fas fa-eye"></i> Lihat detail
                         </a>
                     </div>
                 <?php endforeach; ?>
             </div>
 
-            <?php if ($totalPages > 1): ?>
+            <?php if ($showPagination): ?>
                 <nav class="pager-wrap" aria-label="Navigasi halaman ujian">
                     <div class="pager">
-                        <?php if ($page > 1): ?>
-                            <a href="<?= $baseUrl ?>?page=<?= $page - 1 ?>" aria-label="Sebelumnya">&lsaquo;</a>
+                        <?php if ($hasPreviousPage): ?>
+                            <a href="<?= $baseUrl ?>?page=<?= $previousPage ?>" aria-label="Sebelumnya">&lsaquo;</a>
                         <?php else: ?>
                             <span class="disabled">&lsaquo;</span>
                         <?php endif; ?>
@@ -301,8 +360,8 @@ for ($i = 1; $i <= $totalPages; $i++) {
                             <?php endif; ?>
                         <?php endforeach; ?>
 
-                        <?php if ($page < $totalPages): ?>
-                            <a href="<?= $baseUrl ?>?page=<?= $page + 1 ?>" aria-label="Berikutnya">&rsaquo;</a>
+                        <?php if ($hasNextPage): ?>
+                            <a href="<?= $baseUrl ?>?page=<?= $nextPage ?>" aria-label="Berikutnya">&rsaquo;</a>
                         <?php else: ?>
                             <span class="disabled">&rsaquo;</span>
                         <?php endif; ?>
@@ -316,6 +375,7 @@ for ($i = 1; $i <= $totalPages; $i++) {
         <?php endif; ?>
     </div>
 
-    <script src="<?= asset_url('vendor/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js') ?>"></script>
+    <script src="<?= $bootstrapJsUrl ?>"></script>
 </body>
+
 </html>

@@ -93,31 +93,26 @@ class AdminController
             'keyword' => $keyword,
         ]);
     }
-    
+
     public function cekSiswa()
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-    
+
         $kelas = trim($_GET['kelas'] ?? '');
         $nama  = trim($_GET['nama'] ?? '');
-    
-        // Cek apakah filter di-submit (ada query string sama sekali)
         $filterDiisi = ($kelas !== '' || $nama !== '');
-    
         $kelasList = db()->query("
             SELECT DISTINCT kelas FROM users
             WHERE role = 'siswa' AND kelas IS NOT NULL AND kelas != ''
             ORDER BY kelas ASC
         ")->fetchAll(\PDO::FETCH_COLUMN);
-    
+
         $siswaList = [];
-    
-        // Hanya query database KALAU salah satu filter diisi
         if ($filterDiisi) {
             $sql = "SELECT id, username, full_name, kelas FROM users WHERE role = 'siswa'";
             $params = [];
-    
+
             if ($kelas !== '') {
                 $sql .= " AND kelas = ?";
                 $params[] = $kelas;
@@ -129,11 +124,11 @@ class AdminController
                 $params[] = $like;
             }
             $sql .= " ORDER BY full_name ASC";
-    
+
             $stmt = db()->prepare($sql);
             $stmt->execute($params);
             $siswaList = $stmt->fetchAll();
-    
+
             // Ambil nilai untuk seluruh siswa sekaligus, bukan satu query per siswa.
             $scoresByUser = [];
             if ($siswaList) {
@@ -163,7 +158,7 @@ class AdminController
             }
             unset($s);
         }
-    
+
         view('admin/cek-siswa', [
             'siswaList'    => $siswaList,
             'kelasList'    => $kelasList,
@@ -172,66 +167,63 @@ class AdminController
             'filterDiisi'  => $filterDiisi,
         ]);
     }
-    
+
     public function editSiswa()
     {
         requireAuth();
         requireRole(['admin', 'guru']);
-    
+
         $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
-    
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fullName = trim($_POST['full_name'] ?? '');
             $username = trim($_POST['username'] ?? '');
             $kelas    = trim($_POST['kelas'] ?? '');
             $backKelas = trim($_POST['back_kelas'] ?? '');
             $backNama  = trim($_POST['back_nama'] ?? '');
-    
+
             $stmt = db()->prepare("
                 UPDATE users SET full_name = ?, username = ?, kelas = ?
                 WHERE id = ? AND role = 'siswa'
             ");
             $stmt->execute([$fullName, $username, $kelas, $id]);
-    
+
             $query = http_build_query(array_filter([
                 'kelas' => $backKelas,
                 'nama'  => $backNama,
             ]));
-    
+
             header('Location: ' . config('app_url') . '/admin/cekSiswa' . ($query ? '?' . $query : ''));
             exit;
         }
-    
+
         $stmt = db()->prepare("SELECT id, username, full_name, kelas FROM users WHERE id = ? AND role = 'siswa'");
         $stmt->execute([$id]);
         $siswa = $stmt->fetch();
-    
+
         if (!$siswa) {
             header('Location: ' . config('app_url') . '/admin/cekSiswa');
             exit;
         }
-    
+
         view('admin/edit-siswa', [
             'siswa'     => $siswa,
             'backKelas' => $_GET['kelas'] ?? '',
             'backNama'  => $_GET['nama'] ?? '',
         ]);
     }
-    
+
     public function suspendAkun()
     {
         requireAuth();
         requireRole(['admin', 'guru']);
 
-        $message  = null;
-        $user     = null;
-        $sessions = [];
-        $results  = [];
-
+        $message = null;
+        $user    = null;
+        $results = [];
         $keyword = trim($_GET['q'] ?? '');
         $userId  = (int)($_GET['user_id'] ?? 0);
 
-        // Cari siswa berdasarkan nama / username
         if ($keyword !== '') {
             $stmt = db()->prepare("
                 SELECT id, full_name, username, kelas
@@ -246,82 +238,100 @@ class AdminController
             $results = $stmt->fetchAll();
         }
 
-        // Load siswa & sessions yang dipilih
         if ($userId > 0) {
             $stmt = db()->prepare("SELECT id, full_name, username FROM users WHERE id = ?");
             $stmt->execute([$userId]);
-            $user = $stmt->fetch();
-            if ($user) {
-                $sessions = $this->fetchSessions($userId);
+            $user = $stmt->fetch() ?: null;
+        }
+
+        // Dispatch aksi POST
+        if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (isset($_POST['reset_session_id'])) {
+                $message = $this->handleReset($user);
             }
         }
 
-        // Proses reset (POST)
-        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_session_id']) && $user) {
-            $sid = (int)$_POST['reset_session_id'];
-
-            $stmt = db()->prepare("
-                SELECT es.*, e.title, e.start_time, e.end_time,
-                       (SELECT COUNT(*) FROM answers a WHERE a.session_id = es.id) AS answered_count
-                FROM exam_sessions es
-                JOIN exams e ON es.exam_id = e.id
-                WHERE es.id = ? AND es.user_id = ?
-            ");
-            $stmt->execute([$sid, $user['id']]);
-            $target = $stmt->fetch();
-
-            if (!$target) {
-                $message = ['type' => 'error', 'text' => '❌ Session tidak ditemukan.'];
-            } elseif (!$this->isViolationSession($target)) {
-                $message = ['type' => 'error', 'text' => '❌ Session ini bukan auto-submit/suspend karena pelanggaran.'];
-            } else {
-                $timeUntilEnd = max(0, strtotime($target['end_time']) - time());
-                if ($timeUntilEnd <= 0) {
-                    $message = ['type' => 'error', 'text' => '❌ Waktu ujian sudah berakhir. Tidak bisa dilanjutkan.'];
-                } else {
-                    $finalRemaining = $this->calcFinalRemaining($target);
-
-                    db()->prepare("
-                        UPDATE exam_sessions
-                        SET status            = 'active',
-                            token_status      = 'active',
-                            submitted_at      = NULL,
-                            score             = NULL,
-                            is_best_score     = 0,
-                            violation_count   = 0,
-                            suspension_reason = NULL,
-                            suspended_at      = NULL,
-                            remaining_time    = ?
-                        WHERE id = ? AND user_id = ?
-                    ")->execute([$finalRemaining, $sid, $user['id']]);
-
-                    db()->prepare("DELETE FROM exam_violations WHERE session_id = ?")
-                        ->execute([$sid]);
-
-                    $examTitle = htmlspecialchars($target['title'] ?? '');
-                    $menit     = floor($finalRemaining / 60);
-                    $detik     = $finalRemaining % 60;
-
-                    $message = [
-                        'type' => 'success',
-                        'text' => "✅ Session ujian <b>\"$examTitle\"</b> berhasil direset! "
-                                . "Jawaban siswa tetap tersimpan. "
-                                . "Sisa waktu disesuaikan: <b>{$menit} menit {$detik} detik</b>. "
-                                . "Minta siswa kembali ke halaman Daftar Ujian dan klik <b>\"Mulai Ujian\"</b> untuk melanjutkan.",
-                    ];
-
-                    $sessions = $this->fetchSessions($user['id']);
-                }
-            }
-        }
-
-        // Siapkan timer data untuk JS
+        // Ambil sessions SETELAH aksi, supaya tampilan selalu data terbaru
+        $sessions  = $user ? $this->fetchSessions($user['id']) : [];
         $serverNow = time();
+        [$sessions, $timerData] = $this->prepareSessionView($sessions, $serverNow);
+
+        view('admin/suspend-akun', [
+            'message'      => $message,
+            'keyword'      => $keyword,
+            'userId'       => $userId,
+            'results'      => $results,
+            'selectedUser' => $user,
+            'sessions'     => $sessions,
+            'timerData'    => $timerData,
+            'serverNow'    => $serverNow,
+        ]);
+    }
+
+    /** Lanjutkan ujian siswa yang kena suspend/auto-submit karena pelanggaran. */
+    private function handleReset(array $user): array
+    {
+        $sid = (int)($_POST['reset_session_id'] ?? 0);
+
+        $stmt = db()->prepare("
+            SELECT es.*, e.title, e.start_time, e.end_time,
+                   (SELECT COUNT(*) FROM answers a WHERE a.session_id = es.id) AS answered_count
+            FROM exam_sessions es
+            JOIN exams e ON es.exam_id = e.id
+            WHERE es.id = ? AND es.user_id = ?
+        ");
+        $stmt->execute([$sid, $user['id']]);
+        $target = $stmt->fetch();
+
+        if (!$target) {
+            return $this->flashMessage('error', '❌ Session tidak ditemukan.');
+        }
+        if (!$this->isViolationSession($target)) {
+            return $this->flashMessage('error', '❌ Session ini bukan auto-submit/suspend karena pelanggaran.');
+        }
+
+        $timeUntilEnd = max(0, strtotime($target['end_time']) - time());
+        if ($timeUntilEnd <= 0) {
+            return $this->flashMessage('error', '❌ Waktu ujian sudah berakhir. Tidak bisa dilanjutkan.');
+        }
+
+        $finalRemaining = $this->calcFinalRemaining($target);
+
+        db()->prepare("
+            UPDATE exam_sessions
+            SET status            = 'suspended',
+                token_status      = 'active',
+                submitted_at      = NULL,
+                score             = NULL,
+                is_best_score     = 0,
+                violation_count   = (SELECT COUNT(*) FROM exam_violations WHERE session_id = ?),
+                suspension_reason = NULL,
+                suspended_at      = NULL,
+                remaining_time    = ?
+            WHERE id = ? AND user_id = ?
+        ")->execute([$sid, $finalRemaining, $sid, $user['id']]);
+
+        $examTitle = htmlspecialchars($target['title'] ?? '');
+        $menit     = floor($finalRemaining / 60);
+        $detik     = $finalRemaining % 60;
+
+        return $this->flashMessage(
+            'success',
+            "✅ Session ujian <b>\"$examTitle\"</b> berhasil direset! "
+                . "Jawaban siswa dan histori pelanggaran tetap tersimpan. "
+                . "Sisa durasi: <b>{$menit} menit {$detik} detik</b>. "
+                . "Countdown tidak akan berjalan sampai siswa menekan tombol <b>\"Mulai Ujian\"</b> untuk melanjutkan."
+        );
+    }
+
+    private function prepareSessionView(array $sessions, int $serverNow): array
+    {
         $timerData = [];
-        foreach ($sessions as $s) {
-            $canReset  = $this->isViolationSession($s);
-            $examEnd   = strtotime($s['end_time']);
-            $savedRem  = (int)$s['remaining_time'];
+
+        foreach ($sessions as &$s) {
+            $canReset = $this->isViolationSession($s);
+            $examEnd  = strtotime($s['end_time']);
+            $savedRem = (int)$s['remaining_time'];
 
             $referenceTime = null;
             if (!empty($s['suspended_at'])) {
@@ -351,20 +361,34 @@ class AdminController
                     'serverNow'      => $serverNow,
                 ];
             }
-        }
 
-        view('admin/suspend-akun', [
-            'message'   => $message,
-            'keyword'   => $keyword,
-            'userId'    => $userId,
-            'results'   => $results,
-            'user'      => $user,
-            'sessions'  => $sessions,
-            'timerData' => $timerData,
-            'serverNow' => $serverNow,
-        ]);
+            $resetRemaining = $this->calcFinalRemaining($s);
+            $s['can_reset'] = $canReset;
+            $s['already_reset'] = ($s['status'] === 'suspended' && empty($s['suspension_reason']) && empty($s['submitted_at']));
+            $s['can_retake'] = (
+                !empty($s['submitted_at'])
+                && !$s['already_reset']
+                && in_array($s['status'], ['submitted', 'completed'], true)
+            );
+            $s['status_label']      = $this->suspendStatusLabel($s, $canReset);
+            $s['remaining_minutes'] = floor($savedRem / 60);
+            $s['remaining_seconds'] = $savedRem % 60;
+            $s['answered_percent']  = (int)$s['total_questions'] > 0
+                ? round(((int)$s['answered_count'] / (int)$s['total_questions']) * 100)
+                : 0;
+            $s['exam_expired']  = max(0, $examEnd - time()) <= 0;
+            $s['reset_minutes'] = floor($resetRemaining / 60);
+            $s['reset_seconds'] = $resetRemaining % 60;
+        }
+        unset($s);
+
+        return [$sessions, $timerData];
     }
 
+    private function flashMessage(string $type, string $text): array
+    {
+        return ['type' => $type, 'text' => $text];
+    }
     private function fetchSessions(int $userId): array
     {
         $stmt = db()->prepare("
@@ -372,6 +396,7 @@ class AdminController
                 es.id,
                 e.id   AS exam_id,
                 e.title,
+                e.duration,
                 e.start_time,
                 e.end_time,
                 es.status,
@@ -396,11 +421,13 @@ class AdminController
     {
         if ($s['status'] === 'suspended') return true;
 
-        if (!empty($s['suspension_reason']) &&
+        if (
+            !empty($s['suspension_reason']) &&
             (stripos($s['suspension_reason'], 'pelanggaran') !== false ||
-             stripos($s['suspension_reason'], 'auto')        !== false ||
-             stripos($s['suspension_reason'], 'suspend')     !== false ||
-             stripos($s['suspension_reason'], 'violation')   !== false)) {
+                stripos($s['suspension_reason'], 'auto')        !== false ||
+                stripos($s['suspension_reason'], 'suspend')     !== false ||
+                stripos($s['suspension_reason'], 'violation')   !== false)
+        ) {
             return true;
         }
 
@@ -411,31 +438,166 @@ class AdminController
         return false;
     }
 
+    private function suspendStatusLabel(array $s, bool $isViolation): array
+    {
+        // Sudah submit normal (siswa klik Kumpulkan Ujian)
+        if ($s['submitted_at'] && !$s['already_reset']) {
+            return ['label' => '<i class="fas fa-check"></i> Submitted', 'class' => 'badge-submitted'];
+        }
+
+        // Admin sudah klik Lanjutkan Ujian, menunggu siswa resume
+        if ($s['already_reset']) {
+            return ['label' => '<i class="fas fa-play"></i> Sedang Aktif', 'class' => 'badge-active'];
+        }
+
+        return match ($s['status']) {
+            'active', 'in_progress' => ['label' => '<i class="fas fa-circle"></i> Aktif', 'class' => 'badge-active'],
+            'completed'             => ['label' => '<i class="fas fa-check"></i> Selesai',   'class' => 'badge-submitted'],
+            'suspended'             => ['label' => '<i class="fas fa-pause"></i> Suspended', 'class' => 'badge-suspended'],
+            default                 => ['label' => ucfirst($s['status']), 'class' => 'badge-other'],
+        };
+    }
+
+    /**
+     * Retake ujian untuk sesi yang sudah submit normal (tanpa pelanggaran).
+     * Admin/guru atur durasi baru, status menjadi 'active', jawaban lama tetap dipertahankan.
+     */
+    public function retake($sessionId = null)
+    {
+        requireAuth();
+        requireRole(['admin', 'guru']);
+
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+            return;
+        }
+
+        if ($sessionId === null) {
+            $sessionId = $_POST['session_id'] ?? null;
+        }
+
+        $durationMinutes = (int)($_POST['duration_minutes'] ?? 0);
+
+        if (!$sessionId || $durationMinutes <= 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Data tidak valid. Durasi harus lebih dari 0 menit.']);
+            return;
+        }
+
+        $user = auth();
+
+        try {
+            $pdo = db();
+            $pdo->beginTransaction();
+
+            // Verifikasi session berdasarkan ID saja (admin/guru melakukan retake atas nama siswa)
+            $stmt = $pdo->prepare("
+                SELECT es.id, es.exam_id, es.user_id, es.status, es.submitted_at, es.violation_count,
+                       e.title, e.start_time, e.end_time, e.duration, e.created_by
+                FROM exam_sessions es
+                JOIN exams e ON es.exam_id = e.id
+                WHERE es.id = ?
+                FOR UPDATE
+            ");
+            $stmt->execute([$sessionId]);
+            $target = $stmt->fetch();
+
+            if (!$target) {
+                $pdo->rollBack();
+                http_response_code(404);
+                echo json_encode(['success' => false, 'message' => 'Session ujian tidak ditemukan.']);
+                return;
+            }
+
+            // Guru hanya bisa retake session untuk ujian yang mereka buat sendiri
+            if ($user['role'] === 'guru') {
+                if ((int)($target['created_by'] ?? 0) !== (int)$user['id']) {
+                    $pdo->rollBack();
+                    http_response_code(403);
+                    echo json_encode(['success' => false, 'message' => 'Anda tidak memiliki akses ke ujian ini.']);
+                    return;
+                }
+            }
+
+            // Hanya session yang sudah submit normal (tanpa pelanggaran saat submit)
+            if (empty($target['submitted_at'])) {
+                $pdo->rollBack();
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Session belum disubmit.']);
+                return;
+            }
+
+            // Data pelanggaran adalah riwayat, tidak diblokir untuk retake.
+            // Jika session adalah auto-submit karena pelanggaran, gunakan fitur "Lanjutkan Ujian" di halaman reset.
+            if (!in_array($target['status'], ['submitted', 'completed'], true)) {
+                $pdo->rollBack();
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Status session tidak valid untuk retake.']);
+                return;
+            }
+
+            // Validasi jendela akses ujian: retake hanya boleh dilakukan dalam rentang start_time s/d end_time
+            $now = time();
+            $examStart = strtotime($target['start_time']);
+            $examEnd = strtotime($target['end_time']);
+
+            if ($now < $examStart) {
+                $pdo->rollBack();
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Ujian belum dimulai. Tidak dapat di-retake.']);
+                return;
+            }
+
+            if ($now > $examEnd) {
+                $pdo->rollBack();
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Waktu ujian sudah berakhir. Tidak dapat di-retake.']);
+                return;
+            }
+
+            // Update session: status active, remaining_time = durasi baru, jawaban lama tetap dipertahankan
+            $newRemaining = $durationMinutes * 60;
+
+            $pdo->prepare("
+                UPDATE exam_sessions
+                SET status            = 'active',
+                    token_status      = 'active',
+                    submitted_at      = NULL,
+                    score             = NULL,
+                    is_best_score     = 0,
+                    remaining_time    = ?
+                WHERE id = ? AND user_id = ?
+            ")->execute([$newRemaining, $sessionId, $target['user_id']]);
+
+            $pdo->commit();
+
+            $examTitle = htmlspecialchars($target['title'] ?? '');
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ Retake berhasil diatur untuk <b>\"$examTitle\"</b>. "
+                    . "Durasi retake: <b>{$durationMinutes} menit</b>. "
+                    . "Siswa dapat mulai ujian ulang dari halaman Daftar Ujian.",
+                'session_id' => (int)$sessionId,
+                'duration_minutes' => $durationMinutes,
+                'remaining_time' => $newRemaining,
+            ]);
+        } catch (Exception $e) {
+            if (isset($pdo) && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log("Retake error: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Gagal memproses retake: ' . $e->getMessage()]);
+        }
+    }
+
     private function calcFinalRemaining(array $s): int
     {
-        $now            = time();
         $savedRemaining = (int)$s['remaining_time'];
-
-        $referenceTime = null;
-        if (!empty($s['suspended_at'])) {
-            $referenceTime = strtotime($s['suspended_at']);
-        } elseif (!empty($s['submitted_at']) && $this->isViolationSession($s)) {
-            $referenceTime = strtotime($s['submitted_at']);
-        }
-
-        if (!$referenceTime) {
-            return max(60, $savedRemaining);
-        }
-
-        $elapsed      = max(0, $now - $referenceTime);
-        $newRemaining = max(0, $savedRemaining - $elapsed);
-
-        if ($newRemaining > $savedRemaining) $newRemaining = $savedRemaining;
-
-        $examEnd      = strtotime($s['end_time']);
-        $timeUntilEnd = max(0, $examEnd - $now);
-
-        return max(60, min($newRemaining, $timeUntilEnd, $savedRemaining));
+        return max(60, $savedRemaining);
     }
 
     public function resetPassword()
@@ -445,7 +607,7 @@ class AdminController
 
         $result  = null;
         $email   = trim($_POST['email'] ?? '');
-        $newPass = $_POST['password'] ?? 'Ppdb2026!';
+        $newPass = $_POST['password'] ?? 'Bkn2026!';
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = db()->prepare("SELECT id, full_name, kelas FROM users WHERE username = ?");
@@ -456,7 +618,7 @@ class AdminController
                 $result = ['error' => "Email <b>" . htmlspecialchars($email) . "</b> tidak ditemukan di CAT."];
             } else {
                 $hashed = password_hash($newPass, PASSWORD_DEFAULT);
-                $stmt = db()->prepare("UPDATE users SET password = ?, kelas = 'PPDB-REGULER' WHERE id = ?");
+                $stmt = db()->prepare("UPDATE users SET password = ? WHERE id = ?");
                 $stmt->execute([$hashed, $user['id']]);
                 $result = [
                     'success' => true,
@@ -478,12 +640,12 @@ class AdminController
     {
         requireAuth();
         requireRole(['admin']);
-    
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);
             exit('Method not allowed');
         }
-    
+
         $ids = $_POST['ids'] ?? [];
         if (!is_array($ids)) {
             $ids = [];
@@ -492,38 +654,37 @@ class AdminController
         if ($singleId > 0) {
             $ids[] = $singleId;
         }
-    
+
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
-    
+
         $kelas = trim($_POST['kelas'] ?? '');
         $nama  = trim($_POST['nama'] ?? '');
-    
+
         if (!empty($ids)) {
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    
+
             try {
                 db()->prepare("DELETE FROM nilai WHERE user_id IN ($placeholders)")->execute($ids);
             } catch (\Exception $e) {
                 error_log('Gagal hapus nilai (mungkin tabel nilai belum ada): ' . $e->getMessage());
             }
-    
+
             try {
                 db()->prepare("DELETE FROM users WHERE id IN ($placeholders) AND role = 'siswa'")->execute($ids);
             } catch (\Exception $e) {
                 error_log('Gagal hapus user: ' . $e->getMessage());
             }
         }
-    
+
         $query = http_build_query(array_filter([
             'kelas' => $kelas,
             'nama'  => $nama,
         ]));
-    
+
         header('Location: ' . config('app_url') . '/admin/cekSiswa' . ($query ? '?' . $query : ''));
         exit;
     }
 
-    //=============== RESET SUBMIT ========================
     private const MAX_RESET_MINUTES = 30;
 
     public function resetSubmit()
@@ -576,8 +737,14 @@ class AdminController
 
                         error_log(sprintf(
                             '[reset_submit] RESET: by=%s user=%s session=%d exam="%s" submitted_at=%s score=%s minsAgo=%d restored=%d',
-                            $_SESSION['user']['username'] ?? '-', $email, $sid,
-                            $target['title'], $target['submitted_at'], $target['score'], $minsAgo, $restored
+                            $_SESSION['user']['username'] ?? '-',
+                            $email,
+                            $sid,
+                            $target['title'],
+                            $target['submitted_at'],
+                            $target['score'],
+                            $minsAgo,
+                            $restored
                         ));
 
                         db()->prepare("
@@ -594,18 +761,18 @@ class AdminController
 
                         $message = [
                             'type' => 'success',
-                            'text' => "✅ Ujian <b>\"$judul\"</b> berhasil direset! "
-                                    . "Submit {$minsAgo} menit lalu dibatalkan. "
-                                    . "Jawaban yang sudah diisi <b>tetap tersimpan</b>. "
-                                    . "Sisa waktu: <b>{$menit} menit {$detik} detik</b>. "
-                                    . "Minta siswa buka Daftar Ujian dan klik <b>\"Lanjutkan Ujian\"</b>.",
+                            'text' => "Ujian <b>\"$judul\"</b> berhasil direset! "
+                                . "Submit {$minsAgo} menit lalu dibatalkan. "
+                                . "Jawaban yang sudah diisi <b>tetap tersimpan</b>. "
+                                . "Sisa waktu: <b>{$menit} menit {$detik} detik</b>. "
+                                . "Minta siswa buka Daftar Ujian dan klik <b>\"Lanjutkan Ujian\"</b>.",
                         ];
                         $sessions = $this->fetchSessions((int)$user['id']);
                     }
                 }
             } catch (\Throwable $e) {
                 error_log('[reset_submit] POST error: ' . $e->getMessage() . ' | session=' . $sid);
-                $message = ['type' => 'error', 'text' => '❌ Terjadi error. Cek error log server.'];
+                $message = ['type' => 'error', 'text' => 'Terjadi error. Cek error log server.'];
             }
         }
 
@@ -618,7 +785,7 @@ class AdminController
             $s['reason']    = $check['reason'];
             $s['violation'] = $this->isViolationSession($s);
             $s['mins_ago']  = !empty($s['submitted_at'])
-                                ? (int)round(($serverNow - strtotime($s['submitted_at'])) / 60) : null;
+                ? (int)round(($serverNow - strtotime($s['submitted_at'])) / 60) : null;
             $s['restored']  = $check['can'] ? $this->calcRestoredRemaining($s) : 0;
             $s['sl']        = $this->resetStatusLabel($s);
 
@@ -639,7 +806,7 @@ class AdminController
             'user'      => $user,
             'sessions'  => $sessions,
             'timerData' => $timerData,
-            'maxMinutes'=> self::MAX_RESET_MINUTES,
+            'maxMinutes' => self::MAX_RESET_MINUTES,
         ]);
     }
 
