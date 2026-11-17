@@ -550,11 +550,43 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             margin: 0 auto;
             max-width: none;
         }
+        /* Page loader / skeleton */
+        #page-loader{position:fixed;inset:0;z-index:9999998;background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:20px}
+        #page-loader .pl-card{width:min(900px,100%);background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+        .skel{background:linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 37%,#e5e7eb 63%);background-size:400% 100%;animation:skel 1.2s ease-in-out infinite;border-radius:8px}
+        @keyframes skel{0%{background-position:100% 0}100%{background-position:0 0}}
+        .skel-line{height:14px;margin:10px 0}.skel-title{height:22px;width:55%;margin-bottom:16px}.skel-opt{height:44px;margin:10px 0}
+        #page-error{position:fixed;inset:0;z-index:10000060;background:rgba(15,23,42,.92);display:none;align-items:center;justify-content:center;padding:20px;color:#fff;text-align:center}
+        #page-error .pe-card{background:#111827;border:1px solid #334155;border-radius:12px;padding:28px;max-width:520px;width:100%}
+        #page-error .btn-r{background:#2563eb;color:#fff;border:0;padding:12px 18px;border-radius:8px;font-weight:600;cursor:pointer;margin:6px}
+        #page-error .btn-b{background:#334155;color:#fff;border:0;padding:12px 18px;border-radius:8px;font-weight:600;cursor:pointer;margin:6px;text-decoration:none;display:inline-block}
+        img[loading="lazy"], audio[preload="none"]{content-visibility:auto}
     </style>
 </head>
 
 <body>
-    <?php if ($isSuspended): ?>
+    <div id="page-loader" style="<?= $isSuspended ? 'display:none' : '' ?>">
+        <div class="pl-card">
+            <div class="skel skel-title"></div>
+            <div class="skel skel-line" style="width:90%"></div>
+            <div class="skel skel-line" style="width:80%"></div>
+            <div class="skel skel-line" style="width:70%"></div>
+            <div style="height:12px"></div>
+            <div class="skel skel-opt"></div>
+            <div class="skel skel-opt"></div>
+            <div class="skel skel-opt"></div>
+            <div class="skel skel-opt"></div>
+            <div style="margin-top:14px;color:#64748b;font-weight:600">Memuat ujian, mohon tunggu...</div>
+        </div>
+    </div>
+    <div id="page-error">
+        <div class="pe-card">
+            <h3 style="margin-bottom:8px">Gagal memuat ujian</h3>
+            <p id="page-error-msg" style="color:#cbd5e1;margin-bottom:16px">Koneksi terputus atau terjadi kendala saat memuat. Silakan muat ulang.</p>
+            <button class="btn-r" onclick="location.reload()">Muat Ulang</button>
+            <a class="btn-b" href="<?= function_exists('config') ? config('app_url') : '' ?>/exam">Kembali ke Daftar Ujian</a>
+        </div>
+    </div>    <?php if ($isSuspended): ?>
         <div style="position:fixed; inset:0; z-index:9999999; background:rgba(15,23,42,.96); align-items:center; justify-content:center; flex-direction:column;">
             <div style="background: white; padding: 40px; border-radius: 15px; text-align: center; max-width: 600px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
                 <div style="font-size: 80px; margin-bottom: 20px;">⏸️</div>
@@ -683,7 +715,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                                     <?php
                                     $imagePath = (function_exists('config') ? config('app_url') : '') . '/uploads/questions/' . $q['question_image'];
                                     ?>
-                                    <img src="<?= htmlspecialchars($imagePath) ?>"
+                                    <img src="<?= htmlspecialchars($imagePath) ?>" loading="lazy" decoding="async"
                                         alt="Gambar Soal <?= $no ?>"
                                         style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); cursor: pointer; transition: transform 0.3s ease; border: 1px solid #dee2e6;"
                                         onclick="toggleImageZoom(this)"
@@ -1497,8 +1529,8 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 .then(r => r.json())
                 .then(data => {
                     if (data.success && data.remaining_time !== undefined) {
-                        const serverTime = parseInt(data.remaining_time, 10) || 0;
-                        if (serverTime !== remainingTime && serverTime >= 0) {
+                        const serverTime = parseInt(data.remaining_time, 10);
+                        if (!isNaN(serverTime) && serverTime >= 0) {
                             remainingTime = serverTime;
                             lastSavedTime = remainingTime;
                             document.getElementById('time-display').textContent =
@@ -1910,6 +1942,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             }, 500);
 
             // [FIX-FS] tombol layar penghalang fullscreen
+            hidePageLoader();
             const fullscreenBtn = document.getElementById('start-fullscreen-btn');
             if (fullscreenBtn) {
                 fullscreenBtn.addEventListener('click', function() {
@@ -1938,7 +1971,18 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 if (syncTimerInterval) clearInterval(syncTimerInterval);
             }
 
-            function unlockExam() {
+        function hidePageLoader(){ var l=document.getElementById('page-loader'); if(l) l.style.display='none'; }
+        function showPageError(msg){ hidePageLoader(); var e=document.getElementById('page-error'); if(!e) return; var m=document.getElementById('page-error-msg'); if(m && msg) m.textContent=msg; e.style.display='flex'; }
+        window.addEventListener('error', function(ev){
+            try {
+                var t = ev && ev.target;
+                if (t && (t.tagName === 'IMG' || t.tagName === 'AUDIO' || t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IFRAME')) return;
+            } catch(e){}
+        });
+        window.addEventListener('unhandledrejection', function(){ /* handled by in-app retries */ });
+
+        function unlockExam() {
+                hidePageLoader();
                 var elTimer = document.getElementById('timer');
                 var elInfo = document.querySelector('.exam-info');
                 var elMain = document.querySelector('.main-container');
@@ -2149,7 +2193,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             function reportSuspension() {
                 const retryButton = document.getElementById('retry-suspension');
                 if (retryButton) retryButton.disabled = true;
-                statusEl().textContent = '⏳ Menyimpan status pelanggaran...';
+                statusEl().textContent = 'Menyimpan status pelanggaran...';
                 fetch(baseUrl + '/exam/suspendSession', {
                         method: 'POST',
                         headers: {
@@ -2167,38 +2211,14 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                         if (!r.ok || !data.success) {
                             throw new Error(data.message || `Pencatatan pelanggaran gagal (HTTP ${r.status})`);
                         }
-                        statusEl().textContent = '⏳ Mengumpulkan jawaban...';
-                        const formData = new FormData();
-                        formData.append('session_id', sessionId);
-                        for (let qNum in questionAnswers) {
-                            const ans = questionAnswers[qNum];
-                            if (ans !== undefined && ans !== null && ans !== '') {
-                                const qId = questionIdMap[qNum];
-                                if (qId) formData.append('answers[' + qId + ']', ans);
-                            }
-                        }
-                        return fetch(baseUrl + '/exam/submit', {
-                            method: 'POST',
-                            headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
-                            },
-                            body: formData
-                        });
-                    })
-                    .then(r => {
-                        if (!r.ok) throw new Error('Submit gagal: ' + r.status);
-                        return r.text();
-                    })
-                    .then(() => {
-                        statusEl().innerHTML = '<span style="color:#27ae60;font-weight:bold;">✓ Ujian berhasil dikumpulkan!</span>';
+                        statusEl().innerHTML = '<span style="color:#27ae60;font-weight:bold;">Sesi ujian berhasil ditangguhkan.</span>';
                         clearBackup();
                         setTimeout(() => {
-                            // Bersihkan popstate & lepas fullscreen sebelum navigate (cegah white screen di Electron)
-                            finishExam(baseUrl + '/exam/result/' + sessionId);
-                        }, 4000);
+                            finishExam(baseUrl + '/exam');
+                        }, 3000);
                     })
                     .catch(err => {
-                        statusEl().textContent = 'Gagal mencatat pelanggaran atau mengumpulkan ujian: ' + err.message;
+                        statusEl().textContent = 'Gagal mencatat pelanggaran: ' + err.message;
                         let button = document.getElementById('retry-suspension');
                         if (!button) {
                             button = document.createElement('button');

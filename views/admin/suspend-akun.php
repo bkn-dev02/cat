@@ -543,15 +543,10 @@
     <div class="container">
 
         <div class="page-header">
-            <div class="icon">🔓</div>
             <div>
                 <h2>Reset Ujian — Auto-Submit &amp; Suspend</h2>
             </div>
         </div>
-        <p class="subtitle">
-            Untuk siswa yang ter-<em>auto submit</em> / ter-<em>suspend</em> karena pelanggaran.
-            Jawaban tetap tersimpan, siswa melanjutkan dari soal yang belum dijawab.
-        </p>
 
         <?php if ($message): ?>
             <div class="alert alert-<?= $message['type'] ?>"><?= $message['text'] ?></div>
@@ -599,7 +594,6 @@
             <div class="student-info">
                 <i class="fas fa-user"></i> <span><?= htmlspecialchars($selectedUser['full_name']) ?></span>
                 <span style="color:#93c5fd">|</span>
-                <span style="font-weight:400; color:#3b82f6">@<?= htmlspecialchars($selectedUser['username']) ?></span>
                 <a href="<?= config('app_url') ?>/admin/suspendAkun?q=<?= urlencode($keyword) ?>"
                     style="margin-left:auto; font-size:.82rem; color:#3b82f6; font-weight:400; text-decoration:none">
                     ← Kembali ke hasil
@@ -619,9 +613,7 @@
                             <tr>
                                 <th style="padding-left:20px">Ujian</th>
                                 <th>Status</th>
-                                <th>Jawaban Tersimpan</th>
                                 <th>Sisa Waktu (Live)</th>
-                                <th>Nilai</th>
                                 <th style="padding-right:20px">Aksi</th>
                             </tr>
                         </thead>
@@ -636,48 +628,50 @@
                                     </td>
                                     <td>
                                         <span class="badge <?= $s['status_label']['class'] ?>"><?= $s['status_label']['label'] ?></span>
-                                        <?php if (!empty($s['suspension_reason'])): ?>
-                                            <div class="violation-box"><i class="fas fa-clipboard-list"></i> <?= htmlspecialchars($s['suspension_reason']) ?>
-                                                <?php if ($s['submitted_at']): ?><br><i class="fas fa-clock"></i> <?= date('d M Y, H:i', strtotime($s['submitted_at'])) ?><?php endif; ?>
-                                            </div>
-                                        <?php elseif ($s['submitted_at'] && $s['can_reset']): ?>
-                                            <div class="violation-box"><i class="fas fa-clock"></i> Auto-submit: <?= date('d M Y, H:i', strtotime($s['submitted_at'])) ?></div>
+                                        <?php
+                                        $violationDetail = !empty($s['last_violation_reason'])
+                                            ? $s['last_violation_reason']
+                                            : (!empty($s['suspension_reason']) ? $s['suspension_reason'] : '');
+                                        ?>
+                                        <?php if ($s['status'] === 'suspended'): ?>
+                                            <div class="violation-box"><i class="fas fa-clipboard-list"></i> Melakukan Pelanggaran: <?= htmlspecialchars($violationDetail !== '' ? $violationDetail : '-') ?></div>
+                                        <?php elseif (in_array($s['status'], ['submitted', 'completed'], true) && !empty($s['submitted_at'])): ?>
+                                            <div class="violation-box"><i class="fas fa-clock"></i> Submitted: <?= date('d M Y, H:i', strtotime($s['submitted_at'])) ?></div>
+                                        <?php elseif ($violationDetail !== ''): ?>
+                                            <div class="violation-box"><i class="fas fa-clipboard-list"></i> <?= htmlspecialchars($violationDetail) ?></div>
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <div style="font-size:.88rem; font-weight:600; color:#374151"><?= (int)$s['answered_count'] ?> / <?= (int)$s['total_questions'] ?></div>
-                                        <div class="progress-wrap">
-                                            <div class="progress-fill" style="width:<?= $s['answered_percent'] ?>%"></div>
-                                        </div>
-                                        <div style="font-size:.72rem; color:#94a3b8; margin-top:2px"><?= $s['answered_percent'] ?>%</div>
-                                    </td>
-                                    <td>
-                                        <?php if ($s['can_reset'] && !$s['exam_expired']): ?>
-                                            <span class="timer-realtime" data-session="<?= $s['id'] ?>">
-                                                <?= sprintf('%02d:%02d', $s['reset_minutes'], $s['reset_seconds']) ?>
-                                            </span>
-                                        <?php elseif ($s['can_reset'] && $s['exam_expired']): ?>
-                                            <span style="color:#ef4444; font-size:.82rem; font-weight:600"><i class="fas fa-ban"></i> Berakhir</span>
-                                        <?php elseif (!$s['submitted_at'] && $s['status'] !== 'completed'): ?>
+                                        <?php if (!empty($s['waiting_for_student']) && !$s['exam_expired']): ?>
                                             <span class="timer-realtime" data-session="<?= $s['id'] ?>">
                                                 <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
                                             </span>
-                                            <div style="font-size:.7rem; color:#6b7280; margin-top:2px">⏱️ Live</div>
-                                        <?php else: ?>
-                                            <span style="color:#94a3b8">—</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <?php if ($s['submitted_at'] && $s['can_reset']): ?>
-                                            <span style="font-size:.84rem; color:#94a3b8; text-decoration:line-through"><?= number_format((float)$s['score'], 0) ?></span>
-                                        <?php elseif ($s['submitted_at']): ?>
-                                            <span style="font-weight:700; color:#059669"><?= number_format((float)$s['score'], 0) ?></span>
+                                            <div style="font-size:.7rem; color:#6b7280; margin-top:2px">Menunggu siswa mulai</div>
+                                        <?php elseif (!empty($s['timer_running']) && !$s['exam_expired']): ?>
+                                            <span class="timer-realtime" data-session="<?= $s['id'] ?>">
+                                                <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
+                                            </span>
+                                            <div style="font-size:.7rem; color:#6b7280; margin-top:2px">Live (sedang dikerjakan)</div>
+                                        <?php elseif ($s['can_reset'] && !$s['exam_expired']): ?>
+                                            <span class="timer-realtime" data-session="<?= $s['id'] ?>">
+                                                <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
+                                            </span>
+                                        <?php elseif ((!empty($s['waiting_for_student']) || !empty($s['timer_running']) || $s['can_reset']) && $s['exam_expired']): ?>
+                                            <span style="color:#ef4444; font-size:.82rem; font-weight:600"><i class="fas fa-ban"></i> Berakhir</span>
+                                        <?php elseif (!$s['submitted_at'] && $s['status'] !== 'completed' && isset($timerData[$s['id']])): ?>
+                                            <span class="timer-realtime" data-session="<?= $s['id'] ?>">
+                                                <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
+                                            </span>
                                         <?php else: ?>
                                             <span style="color:#94a3b8">—</span>
                                         <?php endif; ?>
                                     </td>
                                     <td style="padding-right:20px">
-                                        <?php if ($s['already_reset']): ?>
+                                        <?php if (!empty($s['waiting_for_student'])): ?>
+                                            <span style="color:#2563eb; font-weight:600; font-size:.82rem"><i class="fas fa-hourglass-half"></i> Menunggu Siswa</span>
+                                        <?php elseif (!empty($s['timer_running'])): ?>
+                                            <span style="color:#10b981; font-weight:600; font-size:.82rem"><i class="fas fa-circle"></i> Sedang Dikerjakan</span>
+                                        <?php elseif ($s['already_reset']): ?>
                                             <span style="color:#10b981; font-weight:600; font-size:.82rem"><i class="fas fa-play"></i> Sedang Aktif</span>
                                         <?php elseif ($s['status'] === 'submitted'): ?>
                                             <button type="button" class="btn btn-info btn-sm" onclick="openRetakeModal(<?= (int)$s['id'] ?>, <?= (int)($s['duration'] ?? 0) ?>)">
@@ -686,7 +680,7 @@
                                         <?php elseif ($s['status'] === 'suspended'): ?>
                                             <form method="POST"
                                                 action="<?= config('app_url') ?>/admin/suspendAkun?q=<?= urlencode($keyword) ?>&user_id=<?= (int)$userId ?>"
-                                                onsubmit="return confirmReset(this, '<?= addslashes(htmlspecialchars($s['title'])) ?>', <?= (int)$s['answered_count'] ?>, <?= $s['id'] ?>)">
+                                                onsubmit="return confirmReset(this, '<?= addslashes(htmlspecialchars($s['title'])) ?>')">
                                                 <input type="hidden" name="reset_session_id" value="<?= $s['id'] ?>">
                                                 <button type="submit" class="btn btn-warning btn-sm"><i class="fas fa-play"></i> Lanjutkan Ujian</button>
                                             </form>
@@ -710,40 +704,47 @@
                                 <div class="session-card-title"><?= htmlspecialchars($s['title']) ?></div>
                                 <span class="badge <?= $s['status_label']['class'] ?>"><?= $s['status_label']['label'] ?></span>
                             </div>
-                            <?php if (!empty($s['suspension_reason']) || ($s['submitted_at'] && $s['can_reset'])): ?>
+                            <?php
+                            $violationDetail = !empty($s['last_violation_reason'])
+                                ? $s['last_violation_reason']
+                                : (!empty($s['suspension_reason']) ? $s['suspension_reason'] : '');
+                            ?>
+                            <?php if ($s['status'] === 'suspended'): ?>
                                 <div class="violation-box" style="margin-bottom:10px">
-                                    <?php if (!empty($s['suspension_reason'])): ?>
-                                        <i class="fas fa-clipboard-list"></i> <?= htmlspecialchars($s['suspension_reason']) ?>
-                                        <?php if ($s['submitted_at']): ?><br><i class="fas fa-clock"></i> <?= date('d M Y, H:i', strtotime($s['submitted_at'])) ?><?php endif; ?>
-                                        <?php else: ?>
-                                            <i class="fas fa-clock"></i> Auto-submit: <?= date('d M Y, H:i', strtotime($s['submitted_at'])) ?>
-                                        <?php endif; ?>
+                                    <i class="fas fa-clipboard-list"></i> Melakukan Pelanggaran: <?= htmlspecialchars($violationDetail !== '' ? $violationDetail : '-') ?>
+                                </div>
+                            <?php elseif (in_array($s['status'], ['submitted', 'completed'], true) && !empty($s['submitted_at'])): ?>
+                                <div class="violation-box" style="margin-bottom:10px">
+                                    <i class="fas fa-clock"></i> Submitted: <?= date('d M Y, H:i', strtotime($s['submitted_at'])) ?>
+                                </div>
+                            <?php elseif ($violationDetail !== ''): ?>
+                                <div class="violation-box" style="margin-bottom:10px">
+                                    <i class="fas fa-clipboard-list"></i> <?= htmlspecialchars($violationDetail) ?>
                                 </div>
                             <?php endif; ?>
                             <div class="session-card-grid">
                                 <div class="session-card-item">
-                                    <label>Jawaban</label>
-                                    <div class="val"><?= (int)$s['answered_count'] ?> / <?= (int)$s['total_questions'] ?> soal</div>
-                                    <div class="progress-wrap" style="max-width:100%">
-                                        <div class="progress-fill" style="width:<?= $s['answered_percent'] ?>%"></div>
-                                    </div>
-                                    <div style="font-size:.72rem;color:#94a3b8;margin-top:2px"><?= $s['answered_percent'] ?>% terjawab</div>
-                                </div>
-                                <div class="session-card-item">
                                     <label>Sisa Waktu (Live)</label>
-                                    <?php if ($s['can_reset'] && !$s['exam_expired']): ?>
-                                        <div style="font-size:.72rem;color:#94a3b8;text-decoration:line-through"><?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?></div>
-                                        <span class="timer-realtime val" data-session="<?= $s['id'] ?>">
-                                            <?= sprintf('%02d:%02d', $s['reset_minutes'], $s['reset_seconds']) ?>
-                                        </span>
-                                        <div style="font-size:.7rem;color:#6b7280">sisa jika reset sekarang</div>
-                                    <?php elseif ($s['can_reset'] && $s['exam_expired']): ?>
-                                        <div class="val" style="color:#ef4444">⛔ Berakhir</div>
-                                    <?php elseif (!$s['submitted_at'] && $s['status'] !== 'completed'): ?>
+                                    <?php if (!empty($s['waiting_for_student']) && !$s['exam_expired']): ?>
                                         <span class="timer-realtime val" data-session="<?= $s['id'] ?>">
                                             <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
                                         </span>
-                                        <div style="font-size:.7rem;color:#6b7280">⏱️ Live</div>
+                                        <div style="font-size:.7rem;color:#6b7280">Menunggu siswa mulai</div>
+                                    <?php elseif (!empty($s['timer_running']) && !$s['exam_expired']): ?>
+                                        <span class="timer-realtime val" data-session="<?= $s['id'] ?>">
+                                            <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
+                                        </span>
+                                        <div style="font-size:.7rem;color:#6b7280">Live (sedang dikerjakan)</div>
+                                    <?php elseif ($s['can_reset'] && !$s['exam_expired']): ?>
+                                        <span class="timer-realtime val" data-session="<?= $s['id'] ?>">
+                                            <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
+                                        </span>
+                                    <?php elseif ((!empty($s['waiting_for_student']) || !empty($s['timer_running']) || $s['can_reset']) && $s['exam_expired']): ?>
+                                        <div class="val" style="color:#ef4444">Berakhir</div>
+                                    <?php elseif (!$s['submitted_at'] && $s['status'] !== 'completed' && isset($timerData[$s['id']])): ?>
+                                        <span class="timer-realtime val" data-session="<?= $s['id'] ?>">
+                                            <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
+                                        </span>
                                     <?php else: ?>
                                         <div class="val" style="color:#94a3b8">—</div>
                                     <?php endif; ?>
@@ -754,20 +755,13 @@
                                         <div class="val" style="color:#ef4444"><i class="fas fa-bolt"></i> <?= (int)$s['violation_count'] ?>x</div>
                                     </div>
                                 <?php endif; ?>
-                                <div class="session-card-item">
-                                    <label>Nilai</label>
-                                    <?php if ($s['submitted_at'] && $s['can_reset']): ?>
-                                        <div class="val" style="color:#94a3b8;text-decoration:line-through"><?= number_format((float)$s['score'], 0) ?></div>
-                                        <div style="font-size:.72rem;color:#94a3b8">akan direset</div>
-                                    <?php elseif ($s['submitted_at']): ?>
-                                        <div class="val" style="color:#059669"><?= number_format((float)$s['score'], 0) ?></div>
-                                    <?php else: ?>
-                                        <div class="val" style="color:#94a3b8">—</div>
-                                    <?php endif; ?>
-                                </div>
                             </div>
                             <div class="session-card-footer">
-                                <?php if ($s['already_reset']): ?>
+                                <?php if (!empty($s['waiting_for_student'])): ?>
+                                    <div style="text-align:center;color:#2563eb;font-weight:600;font-size:.85rem"><i class="fas fa-hourglass-half"></i> Siap dilanjutkan, menunggu siswa mulai</div>
+                                <?php elseif (!empty($s['timer_running'])): ?>
+                                    <div style="text-align:center;color:#10b981;font-weight:600;font-size:.85rem"><i class="fas fa-circle"></i> Sedang dikerjakan siswa</div>
+                                <?php elseif ($s['already_reset']): ?>
                                     <div style="text-align:center;color:#10b981;font-weight:600;font-size:.85rem"><i class="fas fa-play"></i> Sedang Aktif</div>
                                 <?php elseif ($s['status'] === 'submitted'): ?>
                                     <button type="button" class="btn btn-info btn-block" onclick="openRetakeModal(<?= (int)$s['id'] ?>, <?= (int)($s['duration'] ?? 0) ?>)">
@@ -776,7 +770,7 @@
                                 <?php elseif ($s['status'] === 'suspended'): ?>
                                     <form method="POST"
                                         action="<?= config('app_url') ?>/admin/suspendAkun?q=<?= urlencode($keyword) ?>&user_id=<?= (int)$userId ?>"
-                                        onsubmit="return confirmReset(this, '<?= addslashes(htmlspecialchars($s['title'])) ?>', <?= (int)$s['answered_count'] ?>, <?= $s['id'] ?>)">
+                                        onsubmit="return confirmReset(this, '<?= addslashes(htmlspecialchars($s['title'])) ?>')">
                                         <input type="hidden" name="reset_session_id" value="<?= $s['id'] ?>">
                                         <button type="submit" class="btn btn-warning btn-block"><i class="fas fa-play"></i> Lanjutkan Ujian</button>
                                     </form>
@@ -832,115 +826,126 @@
             function calcRemaining(data) {
                 const nowBrowser = Math.floor(Date.now() / 1000);
                 const browserElapsed = nowBrowser - PAGE_LOAD_TS;
+                const nowServer = data.serverNow + browserElapsed;
                 let remaining;
 
-                if (data.type === 'suspended') {
-                    // Saat suspended, waktu TIDAK berkurang. Sisa durasi dipertahankan utuh.
+                if (data.type === 'suspended' || data.type === 'waiting') {
                     remaining = data.savedRemaining;
+                } else if (data.type === 'running') {
+                    if (data.startedAtTs) {
+                        remaining = data.savedRemaining - (nowServer - data.startedAtTs);
+                    } else {
+                        remaining = data.savedRemaining;
+                    }
                 } else {
-                    remaining = Math.max(0, data.savedRemaining - browserElapsed);
-                    const timeUntilEnd = Math.max(0, data.endTs - nowBrowser);
+                    remaining = data.savedRemaining - browserElapsed;
+                }
+
+                if (data.endTs) {
+                    const timeUntilEnd = data.endTs - nowServer;
                     remaining = Math.min(remaining, timeUntilEnd);
                 }
 
-                return Math.max(0, remaining);
+                return Math.max(0, Math.floor(remaining));
             }
 
             function colorClass(secs, type) {
                 if (secs <= 0) return 'expired';
-                if (type === 'active') return 'active';
+                if (type === 'running') return 'active';
+                if (type === 'waiting' || type === 'suspended') {
+                    if (secs < 60) return 'urgent';
+                    if (secs < 300) return 'warning';
+                    return 'ok';
+                }
                 if (secs < 60) return 'urgent';
                 if (secs < 300) return 'warning';
                 return 'ok';
             }
-
-            function updateAllTimers() {
-                document.querySelectorAll('.timer-realtime[data-session]').forEach(el => {
-                    const sid = el.dataset.session;
-                    const data = TIMER_DATA[sid];
-                    if (!data) return;
-
-                    const rem = calcRemaining(data);
-                    el.textContent = fmt(rem);
-
-                    el.classList.remove('expired', 'urgent', 'warning', 'ok', 'active');
-                    el.classList.add(colorClass(rem, data.type));
-
-                    if (rem <= 0) {
-                        const input = document.querySelector(`form input[name="reset_session_id"][value="${sid}"]`);
-                        if (input) {
-                            const btn = input.closest('form').querySelector('button[type="submit"]');
-                            if (btn && !btn.disabled) {
-                                btn.disabled = true;
-                                btn.textContent = '⛔ Waktu habis';
-                                btn.style.opacity = '0.5';
-                                btn.style.cursor = 'not-allowed';
-                            }
-                        }
-                    }
-                });
-            }
-
-            updateAllTimers();
-            setInterval(updateAllTimers, 1000);
-
-            // Retake modal functions
-            function openRetakeModal(sessionId, defaultDuration) {
-                document.getElementById('retakeSessionId').value = sessionId;
-                document.getElementById('retakeDurationMinutes').value = defaultDuration > 0 ? defaultDuration : 60;
-                document.getElementById('retakeForm').action = '<?= config('app_url') ?>/admin/retake/' + sessionId;
-                document.getElementById('retakeModal').style.display = 'flex';
-            }
-
-            function handleRetakeSubmit(e) {
-                e.preventDefault();
-                const form = document.getElementById('retakeForm');
-                const formData = new FormData(form);
-
-                fetch(form.action, {
-                        method: 'POST',
-                        body: formData,
-                        credentials: 'same-origin'
-                    })
-                    .then(r => r.json())
-                    .then(result => {
-                        if (result.success) {
-                            alert(result.message);
-                            closeRetakeModal();
-                            // Redirect back to suspendAkun page with current user
-                            const url = new URL(window.location.href);
-                            url.searchParams.set('retake_success', '1');
-                            window.location.href = url.toString();
-                        } else {
-                            alert('Gagal: ' + (result.message || 'Terjadi kesalahan'));
-                        }
-                    })
-                    .catch(() => {
-                        alert('Gagal terhubung ke server.');
-                    });
-                return false;
-            }
-
-            function closeRetakeModal() {
-                document.getElementById('retakeModal').style.display = 'none';
-            }
-
-            // Close modal when clicking outside
-            document.getElementById('retakeModal').addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeRetakeModal();
-                }
-            });
         </script>
     <?php endif; ?>
 
     <script>
-        function confirmReset(form, title, answeredCount, sid) {
+        // fungsi retake dan update waktu
+        function updateAllTimers() {
+            document.querySelectorAll('.timer-realtime[data-session]').forEach(el => {
+                const sid = el.dataset.session;
+                const data = TIMER_DATA[sid];
+                if (!data) return;
+
+                const rem = calcRemaining(data);
+                el.textContent = fmt(rem);
+
+                el.classList.remove('expired', 'urgent', 'warning', 'ok', 'active');
+                el.classList.add(colorClass(rem, data.type));
+
+                if (rem <= 0) {
+                    const input = document.querySelector(`form input[name="reset_session_id"][value="${sid}"]`);
+                    if (input) {
+                        const btn = input.closest('form').querySelector('button[type="submit"]');
+                        if (btn && !btn.disabled) {
+                            btn.disabled = true;
+                            btn.textContent = '⛔ Waktu habis';
+                            btn.style.opacity = '0.5';
+                            btn.style.cursor = 'not-allowed';
+                        }
+                    }
+                }
+            });
+        }
+
+        updateAllTimers();
+        setInterval(updateAllTimers, 1000);
+
+        function openRetakeModal(sessionId, defaultDuration) {
+            document.getElementById('retakeSessionId').value = sessionId;
+            document.getElementById('retakeDurationMinutes').value = defaultDuration > 0 ? defaultDuration : 60;
+            document.getElementById('retakeForm').action = '<?= config('app_url') ?>/admin/retake/' + sessionId;
+            document.getElementById('retakeModal').style.display = 'flex';
+        }
+
+        function handleRetakeSubmit(e) {
+            e.preventDefault();
+            const form = document.getElementById('retakeForm');
+            const formData = new FormData(form);
+
+            fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                })
+                .then(r => r.json())
+                .then(result => {
+                    if (result.success) {
+                        alert(result.message);
+                        closeRetakeModal();
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('retake_success', '1');
+                        window.location.href = url.toString();
+                    } else {
+                        alert('Gagal: ' + (result.message || 'Terjadi kesalahan'));
+                    }
+                })
+                .catch(() => {
+                    alert('Gagal terhubung ke server.');
+                });
+            return false;
+        }
+
+        function closeRetakeModal() {
+            document.getElementById('retakeModal').style.display = 'none';
+        }
+
+        document.getElementById('retakeModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeRetakeModal();
+            }
+        });
+
+        function confirmReset(form, title) {
             return confirm(
-                'Reset ujian "' + title + '"?\n\n' +
-                '✅ ' + answeredCount + ' jawaban tetap tersimpan.\n' +
-                '⚡ Pelanggaran direset ke 0.\n' +
-                '⏱️ Sisa waktu akan dihitung ulang.\n\n' +
+                'Lanjutkan ujian "' + title + '"?\n\n' +
+                'Status akan diubah menjadi aktif dan jawaban/histori pelanggaran tetap tersimpan.\n' +
+                'Waktu hanya akan berjalan setelah siswa mulai ujian kembali.\n\n' +
                 'Lanjutkan?'
             );
         }

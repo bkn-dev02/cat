@@ -246,10 +246,30 @@
         button {
             font-size: 16px !important;
         }
+        #pdf-loading{position:fixed;inset:0;z-index:10050;background:#0f172a;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#e2e8f0;text-align:center;padding:20px}
+        #pdf-loading .skel-box{width:min(700px,90vw);height:60vh;max-height:520px;border-radius:12px;background:linear-gradient(90deg,#334155 25%,#475569 37%,#334155 63%);background-size:400% 100%;animation:skel 1.2s ease-in-out infinite;margin-top:18px}
+        @keyframes skel{0%{background-position:100% 0}100%{background-position:0 0}}
+        #pdf-error{position:fixed;inset:0;z-index:10060;background:rgba(15,23,42,.96);display:none;align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;padding:24px}
+        #pdf-error .card{background:#111827;border:1px solid #334155;border-radius:12px;padding:24px;max-width:520px;width:100%}
+        #pdf-error button,#pdf-error a{margin:6px;padding:12px 18px;border-radius:8px;border:0;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block}
+        #pdf-error .retry{background:#2563eb;color:#fff} #pdf-error .back{background:#334155;color:#fff}
     </style>
 </head>
 
 <body>
+    <div id="pdf-loading">
+        <div style="font-size:18px;font-weight:700">Memuat dokumen ujian...</div>
+        <div style="font-size:13px;opacity:.85;margin-top:6px">Mohon tunggu, halaman akan siap sebentar lagi.</div>
+        <div class="skel-box"></div>
+    </div>
+    <div id="pdf-error">
+        <div class="card">
+            <h3 style="margin-bottom:8px">Gagal memuat dokumen</h3>
+            <p id="pdf-error-msg" style="color:#cbd5e1;margin-bottom:14px">Koneksi bermasalah atau dokumen tidak dapat dimuat.</p>
+            <button class="retry" onclick="location.reload()">Muat Ulang</button>
+            <a class="back" href="<?= config('app_url') ?>/exam">Kembali ke Daftar Ujian</a>
+        </div>
+    </div>
     <div id="timer">00:00</div>
 
     <div id="info">
@@ -278,6 +298,31 @@
     <button class="btn-finish" onclick="finishExam()">Selesai</button>
 
     <script>
+        (function(){
+            var iframe = document.getElementById('pdfViewer');
+            var loader = document.getElementById('pdf-loading');
+            var errBox = document.getElementById('pdf-error');
+            var errMsg = document.getElementById('pdf-error-msg');
+            var loaded = false;
+            function hideLoader(){ if(loader) loader.style.display='none'; }
+            function showError(msg){ if(errMsg && msg) errMsg.textContent = msg; if(errBox) errBox.style.display='flex'; hideLoader(); }
+            if (iframe) {
+                iframe.addEventListener('load', function(){
+                    loaded = true;
+                    hideLoader();
+                });
+                iframe.addEventListener('error', function(){
+                    showError('Dokumen ujian gagal dimuat. Periksa koneksi lalu muat ulang.');
+                });
+                // fallback timeout untuk koneksi lambat/gagal diam
+                setTimeout(function(){
+                    if (!loaded) hideLoader();
+                }, 15000);
+            } else {
+                showError('Dokumen ujian tidak tersedia. Silakan muat ulang.');
+            }
+            window.__showPdfLoadError = showError;
+        })();
         const examId = <?= $exam['id'] ?>;
         const duration = <?= $exam['duration'] ?> * 60;
         let timeLeft = duration;
@@ -402,21 +447,39 @@
             }, 3000);
         }
 
+        function createViolationEventUuid() {
+            const bytes = new Uint8Array(16);
+            if (window.crypto && window.crypto.getRandomValues) {
+                window.crypto.getRandomValues(bytes);
+            } else {
+                for (let i = 0; i < bytes.length; i++) {
+                    bytes[i] = Math.floor(Math.random() * 256);
+                }
+            }
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+            return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+        }
+
         // Suspend exam
         function suspendExam() {
-            fetch('<?= config('app_url') ?>/exam/suspendToken', {
+            const payload = new URLSearchParams({
+                session_id: String(<?= (int)$session['id'] ?>),
+                event_uuid: createViolationEventUuid(),
+                reason: 'Terlalu banyak pelanggaran (' + warningCount + 'x)',
+                remaining_time: String(Math.max(0, Math.floor(timeLeft)))
+            });
+
+            fetch('<?= config('app_url') ?>/exam/suspendSession', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
                 },
-                body: JSON.stringify({
-                    session_id: <?= $session['id'] ?>,
-                    reason: 'Terlalu banyak pelanggaran (' + warningCount + 'x)',
-                    violation_count: warningCount
-                })
-            }).then(() => {
+                body: payload.toString()
+            }).finally(() => {
                 alert('Ujian Anda telah di-suspend karena melanggar aturan!');
-                window.location.href = '<?= config('app_url') ?>/exam/suspended/<?= $session['id'] ?>';
+                window.location.href = '<?= config('app_url') ?>/exam';
             });
         }
 

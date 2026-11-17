@@ -274,8 +274,7 @@ class AdminController
         $sid = (int)($_POST['reset_session_id'] ?? 0);
 
         $stmt = db()->prepare("
-            SELECT es.*, e.title, e.start_time, e.end_time,
-                   (SELECT COUNT(*) FROM answers a WHERE a.session_id = es.id) AS answered_count
+            SELECT es.*, e.title, e.start_time, e.end_time
             FROM exam_sessions es
             JOIN exams e ON es.exam_id = e.id
             WHERE es.id = ? AND es.user_id = ?
@@ -297,9 +296,9 @@ class AdminController
 
         $finalRemaining = $this->calcFinalRemaining($target);
 
-        db()->prepare("
+        $stmt = db()->prepare("
             UPDATE exam_sessions
-            SET status            = 'suspended',
+            SET status            = 'active',
                 token_status      = 'active',
                 submitted_at      = NULL,
                 score             = NULL,
@@ -307,20 +306,26 @@ class AdminController
                 violation_count   = (SELECT COUNT(*) FROM exam_violations WHERE session_id = ?),
                 suspension_reason = NULL,
                 suspended_at      = NULL,
+                started_at        = NULL,
                 remaining_time    = ?
-            WHERE id = ? AND user_id = ?
-        ")->execute([$sid, $finalRemaining, $sid, $user['id']]);
+            WHERE id = ? AND user_id = ? AND status = 'suspended'
+        ");
+        $stmt->execute([$sid, $finalRemaining, $sid, $user['id']]);
+
+        if ($stmt->rowCount() === 0) {
+            return $this->flashMessage('error', '❌ Session tidak dapat dilanjutkan karena status sudah berubah.');
+        }
 
         $examTitle = htmlspecialchars($target['title'] ?? '');
         $menit     = floor($finalRemaining / 60);
         $detik     = $finalRemaining % 60;
 
-        return $this->flashMessage(
+                return $this->flashMessage(
             'success',
-            "✅ Session ujian <b>\"$examTitle\"</b> berhasil direset! "
-                . "Jawaban siswa dan histori pelanggaran tetap tersimpan. "
+            "Session ujian <b>\"$examTitle\"</b> berhasil dilanjutkan. "
+                . "Status diubah menjadi aktif, jawaban dan histori pelanggaran tetap tersimpan. "
                 . "Sisa durasi: <b>{$menit} menit {$detik} detik</b>. "
-                . "Countdown tidak akan berjalan sampai siswa menekan tombol <b>\"Mulai Ujian\"</b> untuk melanjutkan."
+                . "Siswa dapat melanjutkan ujian dari halaman Daftar Ujian."
         );
     }
 
@@ -332,53 +337,82 @@ class AdminController
             $canReset = $this->isViolationSession($s);
             $examEnd  = strtotime($s['end_time']);
             $savedRem = (int)$s['remaining_time'];
+            $timeUntilEnd = max(0, $examEnd - $serverNow);
 
-            $referenceTime = null;
-            if (!empty($s['suspended_at'])) {
-                $referenceTime = strtotime($s['suspended_at']);
-            } elseif (!empty($s['submitted_at']) && $canReset) {
-                $referenceTime = strtotime($s['submitted_at']);
-            }
+            $waitingForStudent = false;
+            $runningLive = false;
+            $effectiveRemaining = $savedRem;
 
-            if ($canReset) {
-                $timerData[$s['id']] = [
-                    'type'           => 'suspended',
-                    'savedRemaining' => $savedRem,
-                    'referenceTs'    => $referenceTime,
-                    'endTs'          => $examEnd,
-                    'serverNow'      => $serverNow,
-                ];
-            } elseif (
-                !$s['submitted_at'] &&
-                $s['status'] !== 'completed' &&
-                in_array($s['status'], ['active', 'in_progress', 'suspended'])
-            ) {
-                $timerData[$s['id']] = [
-                    'type'           => 'active',
-                    'savedRemaining' => $savedRem,
-                    'referenceTs'    => $serverNow,
-                    'endTs'          => $examEnd,
-                    'serverNow'      => $serverNow,
-                ];
+            if (!$s['submitted_at'] && $s['status'] !== 'completed') {
+                $startedAtTs = !empty($s['started_at']) ? strtotime($s['started_at']) : null;
+
+                if ($canReset) {
+                    // Sesi pelanggaran/suspended: waktu dibekukan
+                    $effectiveRemaining = min($savedRem, $timeUntilEnd);
+                    $referenceTime = null;
+                    if (!empty($s['suspended_at'])) {
+                        $referenceTime = strtotime($s['suspended_at']);
+                    } elseif (!empty($s['submitted_at'])) {
+                        $referenceTime = strtotime($s['submitted_at']);
+                    }
+                    $timerData[$s['id']] = [
+                        'type'           => 'suspended',
+                        'savedRemaining' => $savedRem,
+                        'referenceTs'    => $referenceTime,
+                        'endTs'          => $examEnd,
+                        'serverNow'      => $serverNow,
+                    ];
+                } elseif (in_array($s['status'], ['active', 'in_progress'], true) && $startedAtTs === null) {
+                    // Siap dilanjutkan, tapi siswa belum mulai ujian lagi
+                    $waitingForStudent = true;
+                    $effectiveRemaining = min($savedRem, $timeUntilEnd);
+                    $timerData[$s['id']] = [
+                        'type'           => 'waiting',
+                        'savedRemaining' => $savedRem,
+                        'endTs'          => $examEnd,
+                        'serverNow'      => $serverNow,
+                    ];
+                } elseif (in_array($s['status'], ['active', 'in_progress'], true) && $startedAtTs !== null) {
+                    // Siswa sedang mengerjakan: hitung mundur berbasis started_at server
+                    $runningLive = true;
+                    $elapsed = max(0, $serverNow - $startedAtTs);
+                    $effectiveRemaining = min(max(0, $savedRem - $elapsed), $timeUntilEnd);
+                    $timerData[$s['id']] = [
+                        'type'           => 'running',
+                        'savedRemaining' => $savedRem,
+                        'startedAtTs'    => $startedAtTs,
+                        'endTs'          => $examEnd,
+                        'serverNow'      => $serverNow,
+                    ];
+                } elseif ($s['status'] === 'suspended') {
+                    // Suspended non-violation (fallback): bekukan
+                    $effectiveRemaining = min($savedRem, $timeUntilEnd);
+                    $timerData[$s['id']] = [
+                        'type'           => 'suspended',
+                        'savedRemaining' => $savedRem,
+                        'endTs'          => $examEnd,
+                        'serverNow'      => $serverNow,
+                    ];
+                }
             }
 
             $resetRemaining = $this->calcFinalRemaining($s);
             $s['can_reset'] = $canReset;
             $s['already_reset'] = ($s['status'] === 'suspended' && empty($s['suspension_reason']) && empty($s['submitted_at']));
+            $s['waiting_for_student'] = $waitingForStudent;
+            $s['timer_running'] = $runningLive;
             $s['can_retake'] = (
                 !empty($s['submitted_at'])
                 && !$s['already_reset']
                 && in_array($s['status'], ['submitted', 'completed'], true)
             );
-            $s['status_label']      = $this->suspendStatusLabel($s, $canReset);
-            $s['remaining_minutes'] = floor($savedRem / 60);
-            $s['remaining_seconds'] = $savedRem % 60;
-            $s['answered_percent']  = (int)$s['total_questions'] > 0
-                ? round(((int)$s['answered_count'] / (int)$s['total_questions']) * 100)
-                : 0;
-            $s['exam_expired']  = max(0, $examEnd - time()) <= 0;
-            $s['reset_minutes'] = floor($resetRemaining / 60);
-            $s['reset_seconds'] = $resetRemaining % 60;
+            $s['status_label']      = $this->suspendStatusLabel($s, $canReset, $waitingForStudent);
+            $s['effective_remaining'] = $effectiveRemaining;
+            $s['remaining_minutes'] = floor($effectiveRemaining / 60);
+            $s['remaining_seconds'] = $effectiveRemaining % 60;
+            $s['exam_expired']  = $timeUntilEnd <= 0;
+            $s['reset_minutes'] = floor(min($resetRemaining, $timeUntilEnd > 0 ? $timeUntilEnd : $resetRemaining) / 60);
+            $s['reset_seconds'] = min($resetRemaining, $timeUntilEnd > 0 ? $timeUntilEnd : $resetRemaining) % 60;
         }
         unset($s);
 
@@ -400,14 +434,13 @@ class AdminController
                 e.start_time,
                 e.end_time,
                 es.status,
+                es.started_at,
                 es.submitted_at,
-                es.score,
                 es.remaining_time,
                 es.violation_count,
                 es.suspension_reason,
                 es.suspended_at,
-                (SELECT COUNT(*) FROM answers a WHERE a.session_id = es.id) AS answered_count,
-                (SELECT COUNT(*) FROM exam_questions eq WHERE eq.exam_id = es.exam_id) AS total_questions
+                (SELECT ev.reason FROM exam_violations ev WHERE ev.session_id = es.id ORDER BY ev.id DESC LIMIT 1) AS last_violation_reason
             FROM exam_sessions es
             JOIN exams e ON es.exam_id = e.id
             WHERE es.user_id = ?
@@ -438,15 +471,20 @@ class AdminController
         return false;
     }
 
-    private function suspendStatusLabel(array $s, bool $isViolation): array
+    private function suspendStatusLabel(array $s, bool $isViolation, bool $waitingForStudent = false): array
     {
         // Sudah submit normal (siswa klik Kumpulkan Ujian)
-        if ($s['submitted_at'] && !$s['already_reset']) {
+        if (!empty($s['submitted_at']) && empty($s['already_reset'])) {
             return ['label' => '<i class="fas fa-check"></i> Submitted', 'class' => 'badge-submitted'];
         }
 
-        // Admin sudah klik Lanjutkan Ujian, menunggu siswa resume
-        if ($s['already_reset']) {
+        // Sudah dilanjutkan admin, menunggu siswa mulai ujian lagi
+        if ($waitingForStudent) {
+            return ['label' => '<i class="fas fa-hourglass-half"></i> Siap Dilanjutkan', 'class' => 'badge-active'];
+        }
+
+        // Legacy state (suspended tanpa alasan setelah reset lama)
+        if (!empty($s['already_reset'])) {
             return ['label' => '<i class="fas fa-play"></i> Sedang Aktif', 'class' => 'badge-active'];
         }
 
@@ -454,7 +492,7 @@ class AdminController
             'active', 'in_progress' => ['label' => '<i class="fas fa-circle"></i> Aktif', 'class' => 'badge-active'],
             'completed'             => ['label' => '<i class="fas fa-check"></i> Selesai',   'class' => 'badge-submitted'],
             'suspended'             => ['label' => '<i class="fas fa-pause"></i> Suspended', 'class' => 'badge-suspended'],
-            default                 => ['label' => ucfirst($s['status']), 'class' => 'badge-other'],
+            default                 => ['label' => ucfirst($s['status'] ?? ''), 'class' => 'badge-other'],
         };
     }
 
@@ -558,7 +596,7 @@ class AdminController
                 return;
             }
 
-            // Update session: status active, remaining_time = durasi baru, jawaban lama tetap dipertahankan
+            // Update session: status active, remaining_time = durasi baru, tunggu siswa mulai (started_at NULL)
             $newRemaining = $durationMinutes * 60;
 
             $pdo->prepare("
@@ -568,6 +606,7 @@ class AdminController
                     submitted_at      = NULL,
                     score             = NULL,
                     is_best_score     = 0,
+                    started_at        = NULL,
                     remaining_time    = ?
                 WHERE id = ? AND user_id = ?
             ")->execute([$newRemaining, $sessionId, $target['user_id']]);
@@ -577,9 +616,9 @@ class AdminController
             $examTitle = htmlspecialchars($target['title'] ?? '');
             echo json_encode([
                 'success' => true,
-                'message' => "✅ Retake berhasil diatur untuk <b>\"$examTitle\"</b>. "
+                'message' => "Retake berhasil diatur untuk <b>\"$examTitle\"</b>. "
                     . "Durasi retake: <b>{$durationMinutes} menit</b>. "
-                    . "Siswa dapat mulai ujian ulang dari halaman Daftar Ujian.",
+                    . "Sisa waktu akan mulai berjalan setelah siswa memulai ujian dari halaman Daftar Ujian.",
                 'session_id' => (int)$sessionId,
                 'duration_minutes' => $durationMinutes,
                 'remaining_time' => $newRemaining,
