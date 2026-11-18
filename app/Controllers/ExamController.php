@@ -93,15 +93,23 @@ class ExamController
                                    WHERE ep2.exam_id = e.id AND u2.kelas = ?
                                ) THEN 1
                                ELSE 0
-                           END as can_access,
-                           CASE
-                               WHEN EXISTS (
-                                   SELECT 1 FROM exam_sessions es2
-                                   WHERE es2.exam_id = e.id AND es2.user_id = ?
-                                   AND (es2.status IN ('submitted','completed') OR es2.submitted_at IS NOT NULL)
-                               ) THEN 1
-                               ELSE 0
-                           END as already_submitted
+                            END as can_access,
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT 1 FROM exam_sessions es2
+                                    WHERE es2.exam_id = e.id AND es2.user_id = ?
+                                    AND (es2.status IN ('submitted','completed') OR es2.submitted_at IS NOT NULL)
+                                ) THEN 1
+                                ELSE 0
+                            END as already_submitted,
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT 1 FROM exam_sessions es3
+                                    WHERE es3.exam_id = e.id AND es3.user_id = ?
+                                    AND es3.status = 'suspended'
+                                ) THEN 1
+                                ELSE 0
+                            END as is_suspended
                     FROM exams e
                     LEFT JOIN subjects s ON e.subject_id = s.id
                     LEFT JOIN exam_participants ep ON e.id = ep.exam_id AND ep.user_id = ?
@@ -110,7 +118,7 @@ class ExamController
                     {$categoryWhere}
                     ORDER BY e.start_time ASC
                 ";
-                    $params = [$kelasUser, $kelasUser, $user['id'], $user['id']];
+                    $params = [$kelasUser, $kelasUser, $user['id'], $user['id'], $user['id']];
                     if ($hasCategory) $params[] = $activeTab;
                     $stmt = db()->prepare($sql);
                     $stmt->execute($params);
@@ -221,6 +229,53 @@ class ExamController
                 foreach ($exams as &$exam) {
                     $exam['participant_class_count'] = (int)($participantInfoByExam[$exam['id']]['class_count'] ?? 0);
                     $exam['participant_classes'] = $participantInfoByExam[$exam['id']]['classes'] ?? '';
+                }
+                unset($exam);
+            }
+
+            // ── Siswa: lampirkan status sesi & sisa waktu per siswa (live) ───
+            if ($user['role'] === 'siswa' && !empty($exams)) {
+                $examIds = array_map('intval', array_column($exams, 'id'));
+                $in = implode(',', array_fill(0, count($examIds), '?'));
+                $stmt = db()->prepare("
+                    SELECT exam_id, status, remaining_time, started_at, submitted_at
+                    FROM exam_sessions
+                    WHERE user_id = ? AND exam_id IN ($in)
+                    ORDER BY id DESC
+                ");
+                $stmt->execute(array_merge([(int)$user['id']], $examIds));
+                $sessByExam = [];
+                foreach ($stmt->fetchAll() as $es) {
+                    $eid = (int)$es['exam_id'];
+                    if (!isset($sessByExam[$eid])) $sessByExam[$eid] = $es; // terbaru
+                }
+
+                $now = time();
+                foreach ($exams as &$exam) {
+                    $es = $sessByExam[(int)$exam['id']] ?? null;
+                    $exam['session_status'] = $es['status'] ?? null;
+                    $exam['remaining_seconds'] = null;
+                    if ($es === null) continue;
+
+                    $status = $es['status'];
+                    $saved  = (int)($es['remaining_time'] ?? 0);
+
+                    if (in_array($status, ['active', 'in_progress'], true)) {
+                        $elapsed = !empty($es['started_at']) ? max(0, $now - strtotime($es['started_at'])) : 0;
+                        $remaining = max(0, $saved - $elapsed);
+                    } elseif ($status === 'suspended') {
+                        $remaining = max(0, $saved);
+                    } else {
+                        $remaining = null;
+                    }
+
+                    // Batasi oleh window akses global bila end_time tersedia
+                    if ($remaining !== null && !empty($exam['end_time'])) {
+                        $endIn = strtotime($exam['end_time']) - $now;
+                        $remaining = max(0, min($remaining, $endIn));
+                    }
+
+                    $exam['remaining_seconds'] = $remaining;
                 }
                 unset($exam);
             }
@@ -649,15 +704,12 @@ class ExamController
             } else {
                 $sessionId = $session['id'];
 
-                // Jika sesi sedang suspended, validasi global access window sebelum resume
+                // Sesi suspended DIBLOKIR: siswa tidak dapat melanjutkan sendiri.
+                // Ujian hanya dapat dilanjutkan setelah admin/guru menekan Reset di menu Suspend Akun.
                 if ($session['status'] === 'suspended') {
-                    $now = time();
-                    $examEnd = strtotime($exam['end_time']);
-                    if ($now > $examEnd) {
-                        $_SESSION['error'] = 'Waktu akses ujian sudah berakhir. Tidak dapat melanjutkan ujian.';
-                        redirect('exam');
-                        return;
-                    }
+                    $_SESSION['error'] = 'Sesi ujian ditangguhkan. Silakan hubungi admin/pengawas untuk melanjutkan.';
+                    redirect('exam');
+                    return;
                 }
 
                 // Pertahankan remaining_time (durasi individual), jangan hitung ulang berdasarkan end_time
@@ -754,6 +806,17 @@ class ExamController
             $stmt->execute([$sessionId]);
             $session['status'] = 'active';
             $session['token_status'] = 'active';
+        }
+
+        if (
+            in_array($session['status'], ['active', 'in_progress'], true)
+            && $session['submitted_at'] === null
+            && !empty($session['started_at'])
+        ) {
+            $session['remaining_time'] = max(
+                0,
+                (int)$session['remaining_time'] - max(0, time() - strtotime($session['started_at']))
+            );
         }
 
         // If exam has PDF, show PDF view
@@ -1078,7 +1141,7 @@ class ExamController
             // Verify session belongs to current user and get current server state
             $user = auth();
             $stmt = db()->prepare("
-                SELECT id, remaining_time, status, started_at 
+                SELECT id, remaining_time, status, submitted_at, started_at 
                 FROM exam_sessions 
                 WHERE id = ? AND user_id = ?
             ");
@@ -1089,11 +1152,17 @@ class ExamController
                 return;
             }
 
+            // Hanya sesi yang sedang berjalan yang boleh memperbarui waktu
+            if (!in_array($session['status'], ['active', 'in_progress'], true) || $session['submitted_at'] !== null) {
+                echo json_encode(['success' => false, 'message' => 'Sesi tidak aktif', 'session_status' => $session['status']]);
+                return;
+            }
+
             // Hitung sisa waktu yang diharapkan dari server (bukan dari klien)
             $savedRemaining = (int)$session['remaining_time'];
             $startedAt    = $session['started_at'] ? strtotime($session['started_at']) : time();
             $now          = time();
-            $elapsed      = ($session['status'] === 'active') ? max(0, $now - $startedAt) : 0;
+            $elapsed = max(0, $now - $startedAt);
             $expectedRemaining = max(0, $savedRemaining - $elapsed);
 
             // Terima nilai klien hanya jika tidak melebihi harapan server (mencegah penambahan waktu ilegal)
@@ -1101,7 +1170,11 @@ class ExamController
             $finalRemaining  = min($clientRemaining, $expectedRemaining);
 
             // Update remaining time
-            $stmt = db()->prepare("UPDATE exam_sessions SET remaining_time = ? WHERE id = ?");
+            $stmt = db()->prepare("
+                UPDATE exam_sessions
+                SET remaining_time = ?, started_at = NOW()
+                WHERE id = ? AND status IN ('active', 'in_progress') AND submitted_at IS NULL
+            ");
             $stmt->execute([$finalRemaining, $sessionId]);
 
             echo json_encode(['success' => true, 'message' => 'Waktu tersimpan', 'remaining_time' => $finalRemaining]);
@@ -2472,7 +2545,7 @@ class ExamController
 
         try {
             $stmt = db()->prepare("
-                SELECT es.id, es.remaining_time, es.status, es.submitted_at
+                SELECT es.id, es.remaining_time, es.status, es.submitted_at, es.started_at
                 FROM exam_sessions es
                 WHERE es.id = ? AND es.user_id = ?
             ");
@@ -2485,10 +2558,19 @@ class ExamController
                 return;
             }
 
+            $remaining = (int)($session['remaining_time'] ?? 0);
+            if (
+                in_array($session['status'], ['active', 'in_progress'], true)
+                && $session['submitted_at'] === null
+                && !empty($session['started_at'])
+            ) {
+                $remaining = max(0, $remaining - max(0, time() - strtotime($session['started_at'])));
+            }
+
             echo json_encode([
                 'success' => true,
                 'session_id' => (int)$session['id'],
-                'remaining_time' => (int)($session['remaining_time'] ?? 0),
+                'remaining_time' => $remaining,
                 'status' => $session['status'],
                 'submitted_at' => $session['submitted_at'],
             ]);
@@ -2549,7 +2631,7 @@ class ExamController
 
                 // ── siswa biasa: cek exam_participants ───────────────────────────
             } else {
-                $params = array_merge([$user['id'], $user['id']], $ids);
+                $params = array_merge([$user['id'], $user['id'], $user['id']], $ids);
                 $stmt = db()->prepare("
                     SELECT
                         e.id,
@@ -2573,8 +2655,16 @@ class ExamController
                                 AND (es2.status IN ('submitted','completed') OR es2.submitted_at IS NOT NULL)
                             ) THEN 1
                             ELSE 0
-                        END AS already_submitted
-                    FROM exams e
+                        END AS already_submitted,
+                        CASE
+                            WHEN EXISTS (
+                                SELECT 1 FROM exam_sessions es3
+                                WHERE es3.exam_id = e.id AND es3.user_id = ?
+                                AND es3.status = 'suspended'
+                            ) THEN 1
+                            ELSE 0
+                        END AS is_suspended
+                FROM exams e
                     LEFT JOIN exam_participants ep ON e.id = ep.exam_id AND ep.user_id = ?
                     WHERE e.id IN ($placeholders)
                 ");
@@ -2583,13 +2673,53 @@ class ExamController
             $stmt->execute($params);
             $rows = $stmt->fetchAll();
 
+            // Ambil sesi siswa untuk menghitung sisa waktu live per ujian
+            $sessByExam = [];
+            if (!empty($ids)) {
+                $in = implode(',', array_fill(0, count($ids), '?'));
+                $stmtS = db()->prepare("
+                    SELECT exam_id, status, remaining_time, started_at, submitted_at
+                    FROM exam_sessions
+                    WHERE user_id = ? AND exam_id IN ($in)
+                    ORDER BY id DESC
+                ");
+                $stmtS->execute(array_merge([(int)$user['id']], array_map('intval', $ids)));
+                foreach ($stmtS->fetchAll() as $es) {
+                    $eid = (int)$es['exam_id'];
+                    if (!isset($sessByExam[$eid])) $sessByExam[$eid] = $es;
+                }
+            }
+
+            $now = time();
             $result = [];
             foreach ($rows as $row) {
+                $es = $sessByExam[(int)$row['id']] ?? null;
+                $sessStatus = $es['status'] ?? null;
+                $remaining = null;
+
+                if ($es !== null) {
+                    $saved = (int)($es['remaining_time'] ?? 0);
+                    if (in_array($es['status'], ['active', 'in_progress'], true)) {
+                        $elapsed = !empty($es['started_at']) ? max(0, $now - strtotime($es['started_at'])) : 0;
+                        $remaining = max(0, $saved - $elapsed);
+                    } elseif ($es['status'] === 'suspended') {
+                        $remaining = max(0, $saved);
+                    }
+
+                    if ($remaining !== null && !empty($row['end_time'])) {
+                        $endIn = strtotime($row['end_time']) - $now;
+                        $remaining = max(0, min($remaining, $endIn));
+                    }
+                }
+
                 $result[$row['id']] = [
                     'status'            => $row['status'],
                     'exam_status'       => $row['exam_status'],
                     'can_access'        => (bool)$row['can_access'],
                     'already_submitted' => (bool)$row['already_submitted'],
+                    'is_suspended'      => (bool)($row['is_suspended'] ?? 0),
+                    'session_status'    => $sessStatus,
+                    'remaining_seconds' => $remaining,
                     'start_time'        => $row['start_time'],
                     'end_time'          => $row['end_time'],
                 ];
