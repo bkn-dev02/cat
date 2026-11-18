@@ -1,14 +1,11 @@
 <?php
-// Enable error reporting untuk debugging (hapus di production)
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Pastikan variabel yang diperlukan ada
 if (!isset($session) || !isset($questions)) {
     die('Error: Data ujian tidak tersedia. Silakan hubungi administrator.');
 }
 
-// Jika sesi suspended (setelah admin reset), tampilkan tombol Resume, jangan jalankan timer
 $isSuspended = ($session['status'] ?? '') === 'suspended';
 ?>
 <!DOCTYPE html>
@@ -21,10 +18,9 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title><?= htmlspecialchars($session['title'] ?? 'Ujian') ?> - CAT System</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="<?= function_exists('config') ? config('app_url') : '' ?>/assets/vendor/bootstrap/5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="<?= function_exists('config') ? config('app_url') : '' ?>/assets/vendor/fontawesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="<?= function_exists('config') ? config('app_url') : '' ?>/assets/pdfjs/pdf.min.js?v=3.11.174"></script>
-    <!-- MathJax for Mathematical Formulas -->
     <script>
         window.MathJax = {
             tex: {
@@ -45,7 +41,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             },
             startup: {
                 ready() {
-                    // Guard: only call defaultReady if startup is fully initialized
                     if (MathJax.startup && typeof MathJax.startup.defaultReady === 'function') {
                         MathJax.startup.defaultReady();
                         MathJax.startup.promise.then(() => {
@@ -56,7 +51,8 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             }
         };
     </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script id="MathJax-script" async src="<?= function_exists('config') ? config('app_url') : '' ?>/assets/mathjax/tex-mml-chtml.js"></script>
 
     <style>
         body {
@@ -100,7 +96,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             padding-top: 60px;
         }
 
-        /* === TAMBAHAN: PDF Viewer Container === */
         .pdf-viewer-container {
             flex: 2.2;
             padding: 20px;
@@ -147,11 +142,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             border-color: #93c5fd;
         }
 
-        /* === TAMBAHAN: mode full-width saat soal aktif tidak punya PDF ===
-           Catatan: .exam-content sudah flex:1, jadi begitu panel PDF disembunyikan
-           (display:none), ia otomatis melebar mengisi sisa ruang di .main-container.
-           Class ini sengaja dibiarkan tanpa override lebar supaya tidak "menjepit"
-           kontennya ke kanan seperti sebelumnya (bug: max-width + margin-left:auto). */
         .exam-content.full-width {
             margin-right: 300px;
         }
@@ -550,17 +540,110 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             margin: 0 auto;
             max-width: none;
         }
-        /* Page loader / skeleton */
-        #page-loader{position:fixed;inset:0;z-index:10000000;background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:20px}
-        #page-loader .pl-card{width:min(900px,100%);background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
-        .skel{background:linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 37%,#e5e7eb 63%);background-size:400% 100%;animation:skel 1.2s ease-in-out infinite;border-radius:8px}
-        @keyframes skel{0%{background-position:100% 0}100%{background-position:0 0}}
-        .skel-line{height:14px;margin:10px 0}.skel-title{height:22px;width:55%;margin-bottom:16px}.skel-opt{height:44px;margin:10px 0}
-        #page-error{position:fixed;inset:0;z-index:10000060;background:rgba(15,23,42,.92);display:none;align-items:center;justify-content:center;padding:20px;color:#fff;text-align:center}
-        #page-error .pe-card{background:#111827;border:1px solid #334155;border-radius:12px;padding:28px;max-width:520px;width:100%}
-        #page-error .btn-r{background:#2563eb;color:#fff;border:0;padding:12px 18px;border-radius:8px;font-weight:600;cursor:pointer;margin:6px}
-        #page-error .btn-b{background:#334155;color:#fff;border:0;padding:12px 18px;border-radius:8px;font-weight:600;cursor:pointer;margin:6px;text-decoration:none;display:inline-block}
-        img[loading="lazy"], audio[preload="none"]{content-visibility:auto}
+
+        #page-loader {
+            position: fixed;
+            inset: 0;
+            z-index: 10000000;
+            background: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px
+        }
+
+        #page-loader .pl-card {
+            width: min(900px, 100%);
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .08)
+        }
+
+        .skel {
+            background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
+            background-size: 400% 100%;
+            animation: skel 1.2s ease-in-out infinite;
+            border-radius: 8px
+        }
+
+        @keyframes skel {
+            0% {
+                background-position: 100% 0
+            }
+
+            100% {
+                background-position: 0 0
+            }
+        }
+
+        .skel-line {
+            height: 14px;
+            margin: 10px 0
+        }
+
+        .skel-title {
+            height: 22px;
+            width: 55%;
+            margin-bottom: 16px
+        }
+
+        .skel-opt {
+            height: 44px;
+            margin: 10px 0
+        }
+
+        #page-error {
+            position: fixed;
+            inset: 0;
+            z-index: 10000060;
+            background: rgba(15, 23, 42, .92);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #fff;
+            text-align: center
+        }
+
+        #page-error .pe-card {
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 28px;
+            max-width: 520px;
+            width: 100%
+        }
+
+        #page-error .btn-r {
+            background: #2563eb;
+            color: #fff;
+            border: 0;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 6px
+        }
+
+        #page-error .btn-b {
+            background: #334155;
+            color: #fff;
+            border: 0;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 6px;
+            text-decoration: none;
+            display: inline-block
+        }
+
+        img[loading="lazy"],
+        audio[preload="none"] {
+            content-visibility: auto
+        }
     </style>
 </head>
 
@@ -586,27 +669,27 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             <button class="btn-r" onclick="location.reload()">Muat Ulang</button>
             <a class="btn-b" href="<?= function_exists('config') ? config('app_url') : '' ?>/exam">Kembali ke Daftar Ujian</a>
         </div>
-    </div>    <?php if ($isSuspended): ?>
+    </div> <?php if ($isSuspended): ?>
         <div style="position:fixed; inset:0; z-index:9999999; background:rgba(15,23,42,.96); align-items:center; justify-content:center; flex-direction:column;">
             <div style="background: white; padding: 40px; border-radius: 15px; text-align: center; max-width: 600px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
                 <div style="font-size: 80px; margin-bottom: 20px;">⏸️</div>
-                <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 28px;">Ujian Diteduhkan (Suspended)</h2>
+                <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 28px;">Ujian Ditangguhkan (Suspended)</h2>
                 <p style="margin-bottom: 30px; font-size: 18px; color: #7f8c8d; line-height: 1.6;">
-                    Sisa durasi ujian Anda telah disimpan. Countdown tidak berjalan sampai Anda menekan tombol di bawah untuk melanjutkan.
+                    Ujian Anda ditangguhkan karena pelanggaran. Sisa durasi telah disimpan. Silakan hubungi pengawas/admin untuk melanjutkan ujian.
                 </p>
-                <a href="<?= function_exists('config') ? config('app_url') : '' ?>/exam/start/<?= $session['exam_id'] ?>"
+                <a href="<?= function_exists('config') ? config('app_url') : '' ?>/exam"
                     style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 20px 60px; font-size: 20px; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); text-decoration: none; display: inline-block;">
-                    Mulai Ujian / Resume
+                    Kembali ke Daftar Ujian
                 </a>
                 <p style="margin-top: 20px; font-size: 14px; color: #95a5a6;">
-                    Waktu yang sudah digunakan tidak akan dikurangi selama menunggu resume.
+                    Ujian hanya dapat dilanjutkan setelah admin menekan Reset.
                 </p>
             </div>
         </div>
     <?php endif; ?>
 
     <div id="mobile-warning">
-        ⚠️ JANGAN KELUAR DARI BROWSER! Pelanggaran: <span id="warning-count">0</span>/3
+        ⚠️ JANGAN KELUAR DARI BROWSER! Pelanggaran: <span id="warning-count">0</span>/<span id="warning-max">1</span>
     </div>
 
     <!-- [FIX-FS] Layar penghalang fullscreen -->
@@ -641,8 +724,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
 
     <div class="main-container" style="display:none;">
         <?php
-        // === TAMBAHAN: Bangun peta PDF per nomor soal (bukan cuma 1 PDF untuk semua soal) ===
-        $questionPdfMap = [];      // [nomor_soal => url_pdf]
+        $questionPdfMap = [];
         $examHasPdfQuestions = false;
         if (isset($questions) && is_array($questions)) {
             $qNo = 1;
@@ -1041,6 +1123,8 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
 
         let violationCount = 0;
         const maxViolations = 1;
+        var warningMaxEl = document.getElementById('warning-max');
+        if (warningMaxEl) warningMaxEl.textContent = maxViolations;
         let isFullscreen = false;
         let isSubmitting = false;
 
@@ -1523,14 +1607,14 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             });
         }
 
-        function syncTimerFromServer() {
+        function syncTimerFromServer(force) {
             const baseUrl = '<?= function_exists('config') ? config('app_url') : '' ?>';
             return fetch(`${baseUrl}/exam/getRemainingTime/${sessionId}`)
                 .then(r => r.json())
                 .then(data => {
                     if (data.success && data.remaining_time !== undefined) {
                         const serverTime = parseInt(data.remaining_time, 10);
-                        if (!isNaN(serverTime) && serverTime >= 0) {
+                        if (!isNaN(serverTime) && serverTime >= 0 && (force === true || Math.abs(serverTime - remainingTime) > 3)) {
                             remainingTime = serverTime;
                             lastSavedTime = remainingTime;
                             document.getElementById('time-display').textContent =
@@ -1952,7 +2036,9 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
 
             // [FIX-SKELETON] failsafe: jangan biarkan skeleton menggantung bila MathJax gagal dimuat
             // (jangan mengganggu skeleton fullscreen yang sedang aktif)
-            setTimeout(function () { if (!skeletonShownAt) hidePageLoader(); }, 6000);
+            setTimeout(function() {
+                if (!skeletonShownAt) hidePageLoader();
+            }, 6000);
 
             // [FIX-FS] tombol layar penghalang fullscreen
             const fullscreenBtn = document.getElementById('start-fullscreen-btn');
@@ -1988,60 +2074,73 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 if (syncTimerInterval) clearInterval(syncTimerInterval);
             }
 
-        // === [SKELETON-FULLSCREEN] Skeleton saat klik "Mulai Ujian (Fullscreen)" ===
-        // Tampil minimal 2 detik, dan ikut menyesuaikan bila PDF/jaringan lambat,
-        // dengan batas atas 15 detik agar tidak menggantung.
-        const MIN_SKELETON_MS = 2000;
-        const MAX_SKELETON_MS = 15000;
-        let skeletonShownAt = 0;
-        let skeletonHideScheduled = false;
+            const MIN_SKELETON_MS = 2000;
+            const MAX_SKELETON_MS = 15000;
+            let skeletonShownAt = 0;
+            let skeletonHideScheduled = false;
 
-        function showPageLoader() {
-            const l = document.getElementById('page-loader');
-            if (l) {
-                l.style.display = 'flex';
-                skeletonShownAt = Date.now();
-                skeletonHideScheduled = false;
+            function showPageLoader() {
+                const l = document.getElementById('page-loader');
+                if (l) {
+                    l.style.display = 'flex';
+                    skeletonShownAt = Date.now();
+                    skeletonHideScheduled = false;
+                }
             }
-        }
 
-        function scheduleSkeletonHideAfterReady(timerPromise) {
-            if (skeletonHideScheduled) return;
-            if (!skeletonShownAt) { hidePageLoader(); return; } // tidak ada skeleton aktif
-            skeletonHideScheduled = true;
-
-            const elapsed = Date.now() - skeletonShownAt;
-            const minRemaining = Math.max(0, MIN_SKELETON_MS - elapsed);
-
-            const pdfReady = (window.__pdfSettled && typeof window.__pdfSettled.then === 'function')
-                ? window.__pdfSettled
-                : Promise.resolve();
-            const timerReady = (timerPromise && typeof timerPromise.then === 'function')
-                ? timerPromise.catch(function () {})
-                : Promise.resolve();
-
-            const ready = Promise.all([pdfReady, timerReady]).catch(function () {});
-            const cap = new Promise(function (resolve) { setTimeout(resolve, MAX_SKELETON_MS); });
-
-            Promise.race([ready, cap]).then(function () {
-                setTimeout(function () {
-                    if (!skeletonHideScheduled) return;
+            function scheduleSkeletonHideAfterReady(timerPromise) {
+                if (skeletonHideScheduled) return;
+                if (!skeletonShownAt) {
                     hidePageLoader();
-                }, minRemaining);
+                    return;
+                }
+                skeletonHideScheduled = true;
+
+                const elapsed = Date.now() - skeletonShownAt;
+                const minRemaining = Math.max(0, MIN_SKELETON_MS - elapsed);
+
+                const pdfReady = (window.__pdfSettled && typeof window.__pdfSettled.then === 'function') ?
+                    window.__pdfSettled :
+                    Promise.resolve();
+                const timerReady = (timerPromise && typeof timerPromise.then === 'function') ?
+                    timerPromise.catch(function() {}) :
+                    Promise.resolve();
+
+                const ready = Promise.all([pdfReady, timerReady]).catch(function() {});
+                const cap = new Promise(function(resolve) {
+                    setTimeout(resolve, MAX_SKELETON_MS);
+                });
+
+                Promise.race([ready, cap]).then(function() {
+                    setTimeout(function() {
+                        if (!skeletonHideScheduled) return;
+                        hidePageLoader();
+                    }, minRemaining);
+                });
+            }
+
+            function hidePageLoader() {
+                var l = document.getElementById('page-loader');
+                if (l) l.style.display = 'none';
+            }
+
+            function showPageError(msg) {
+                hidePageLoader();
+                var e = document.getElementById('page-error');
+                if (!e) return;
+                var m = document.getElementById('page-error-msg');
+                if (m && msg) m.textContent = msg;
+                e.style.display = 'flex';
+            }
+            window.addEventListener('error', function(ev) {
+                try {
+                    var t = ev && ev.target;
+                    if (t && (t.tagName === 'IMG' || t.tagName === 'AUDIO' || t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IFRAME')) return;
+                } catch (e) {}
             });
-        }
+            window.addEventListener('unhandledrejection', function() {});
 
-        function hidePageLoader(){ var l=document.getElementById('page-loader'); if(l) l.style.display='none'; }
-        function showPageError(msg){ hidePageLoader(); var e=document.getElementById('page-error'); if(!e) return; var m=document.getElementById('page-error-msg'); if(m && msg) m.textContent=msg; e.style.display='flex'; }
-        window.addEventListener('error', function(ev){
-            try {
-                var t = ev && ev.target;
-                if (t && (t.tagName === 'IMG' || t.tagName === 'AUDIO' || t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IFRAME')) return;
-            } catch(e){}
-        });
-        window.addEventListener('unhandledrejection', function(){ /* handled by in-app retries */ });
-
-        function unlockExam() {
+            function unlockExam() {
                 var elTimer = document.getElementById('timer');
                 var elInfo = document.querySelector('.exam-info');
                 var elMain = document.querySelector('.main-container');
@@ -2052,13 +2151,14 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 if (elSubmit) elSubmit.style.display = '';
                 antiCheatReady = true;
                 timerInterval = setInterval(updateTimer, 1000);
-                syncTimerInterval = setInterval(syncTimerFromServer, 5000);
-                var firstSync = syncTimerFromServer();
+                syncTimerInterval = setInterval(function() {
+                    syncTimerFromServer();
+                }, 5000);
+                var firstSync = syncTimerFromServer(true);
                 updateTimer();
                 updateNavigationDisplay();
                 updateDoubtButton();
                 goToQuestion(1);
-                // [SKELETON-FULLSCREEN] sembunyikan skeleton setelah konten siap (min 2 dtk)
                 scheduleSkeletonHideAfterReady(firstSync);
             }
 
@@ -2091,7 +2191,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 if (e.key === 'Escape' && !isSubmitting) {
                     e.preventDefault();
                     e.stopPropagation();
-                    // [FIX-FS] notifikasi di halaman, bukan alert() bawaan browser
                     showFsToast('⚠️ Tetap dalam mode fullscreen sampai ujian selesai.');
                     return false;
                 }
@@ -2357,20 +2456,15 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             const canvas = document.getElementById('pdf-canvas');
             const ctx = canvas.getContext('2d');
             const loadingEl = document.getElementById('pdf-loading');
-
-            // Cache dokumen PDF yang sudah pernah dimuat, key = URL PDF, agar soal
-            // dengan file PDF sama (atau balik ke soal yang sama) tidak load ulang.
-            const pdfCache = {}; // { url: { doc, numPages } }
-
-            let activeUrl = null; // URL PDF yang sedang aktif di panel
+            const pdfCache = {};
+            let activeUrl = null;
             let currentPage = 1;
             const MIN_SCALE = 0.5;
             const MAX_SCALE = 3;
             const ZOOM_STEP = 0.2;
             let currentScale = 1.5;
-            let loadToken = 0; // dipakai untuk membatalkan hasil load yang sudah usang
-            let currentRenderTask = null; // render task pdf.js yang sedang berjalan, dibatalkan kalau ada render baru
-
+            let loadToken = 0;
+            let currentRenderTask = null;
             const zoomLevelEl = document.getElementById('pdf-zoom-level');
             const zoomInBtn = document.getElementById('pdf-zoom-in-btn');
             const zoomOutBtn = document.getElementById('pdf-zoom-out-btn');
@@ -2383,7 +2477,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             updateZoomControls();
 
             function setPanelState(state) {
-                // state: 'loading' | 'ready'
                 if (state === 'loading') {
                     canvas.style.display = 'none';
                     loadingEl.style.display = 'block';
@@ -2417,9 +2510,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 const cached = pdfCache[activeUrl];
                 if (!cached || !cached.doc) return;
 
-                // Batalkan render yang sedang berjalan (kalau ada) sebelum mulai render baru.
-                // Tanpa ini, klik zoom yang cepat bisa membuat pdf.js gagal render secara
-                // diam-diam karena canvas yang sama dipakai dua render bersamaan.
                 const myRenderToken = ++loadToken;
                 if (currentRenderTask) {
                     try {
@@ -2429,7 +2519,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 }
 
                 cached.doc.getPage(num).then(function(page) {
-                    if (myRenderToken !== loadToken) return; // sudah ada render/soal lain yang lebih baru
+                    if (myRenderToken !== loadToken) return;
 
                     const viewport = page.getViewport({
                         scale: currentScale
@@ -2448,8 +2538,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                         if (currentRenderTask === task) currentRenderTask = null;
                     }).catch(function(err) {
                         if (currentRenderTask === task) currentRenderTask = null;
-                        // RenderingCancelledException terjadi normal saat kita membatalkan
-                        // render lama demi render baru (mis. klik zoom cepat) — bukan error.
                         if (err && err.name === 'RenderingCancelledException') return;
                         console.error('Gagal render halaman PDF:', err);
                         if (myRenderToken === loadToken) {
@@ -2494,7 +2582,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                     '<i class="fas fa-expand-alt"></i>';
                 btn.title = isExpanded ? 'Kecilkan panel PDF' : 'Perbesar panel PDF';
 
-                // Setelah transisi lebar selesai, render ulang di scale yang pas
                 setTimeout(() => {
                     fitToWidth();
                 }, 320);
@@ -2504,7 +2591,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 const cached = pdfCache[activeUrl];
                 if (!cached || !cached.doc) return;
                 const wrapper = document.getElementById('pdf-canvas-wrapper');
-                const availableWidth = wrapper.clientWidth - 32; // dikurangi padding
+                const availableWidth = wrapper.clientWidth - 32;
 
                 cached.doc.getPage(currentPage).then(function(page) {
                     const baseViewport = page.getViewport({
@@ -2529,8 +2616,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             const MAX_CACHE_ENTRIES = 6;
             const MAX_LOAD_RETRIES = 2;
             const RETRY_DELAY_MS = 1500;
-
-            const pdfLoadOrder = []; // urutan pemakaian cache, untuk LRU eviction
+            const pdfLoadOrder = [];
 
             function touchCacheEntry(url) {
                 const idx = pdfLoadOrder.indexOf(url);
@@ -2541,7 +2627,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             function evictOldCacheIfNeeded() {
                 while (pdfLoadOrder.length > MAX_CACHE_ENTRIES) {
                     const oldestUrl = pdfLoadOrder.shift();
-                    if (oldestUrl === activeUrl) continue; // jangan buang yang sedang aktif ditampilkan
+                    if (oldestUrl === activeUrl) continue;
                     const entry = pdfCache[oldestUrl];
                     if (entry && entry.doc && typeof entry.doc.destroy === 'function') {
                         entry.doc.destroy().catch(() => {});
@@ -2558,13 +2644,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                     '<p style="margin-top:12px;">Memuat PDF...</p>' + pctText;
             }
 
-            /**
-             * Lazy load satu PDF dengan progress + retry.
-             * `isPrefetch = true` artinya load ini berjalan diam-diam di background
-             * (tidak boleh mengubah tampilan panel / loading indicator).
-             */
             async function loadPdf(url, isPrefetch = false) {
-                // Cegah load ganda untuk url yang sama saat masih dalam proses.
                 if (pdfCache[url] && pdfCache[url].loading) {
                     return pdfCache[url].loadingPromise;
                 }
@@ -2608,7 +2688,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                                 document.getElementById('pdf-page-count').textContent = pdf.numPages;
                                 currentPage = 1;
                                 setPanelState('ready');
-                                fitToWidth(); // ← ganti dari renderPage(currentPage) langsung ke fitToWidth
+                                fitToWidth();
                             }
                             return pdf;
 
@@ -2616,13 +2696,12 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                             lastError = err;
                             console.error(`Gagal load PDF (percobaan ${attempt + 1}/${MAX_LOAD_RETRIES + 1}):`, url, err);
                             if (attempt < MAX_LOAD_RETRIES) {
-                                if (!isPrefetch) setLoadProgress(null); // reset tampilan sebelum retry
+                                if (!isPrefetch) setLoadProgress(null);
                                 await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
                             }
                         }
                     }
 
-                    // Semua percobaan gagal
                     pdfCache[url] = {
                         doc: null,
                         numPages: 0,
@@ -2642,10 +2721,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 return loadingPromise;
             }
 
-            /**
-             * Prefetch PDF untuk soal berikutnya secara diam-diam saat browser idle,
-             * supaya saat user klik "Selanjutnya" PDF sudah siap tanpa loading.
-             */
             function prefetchNextPdf(fromQuestionNum) {
                 const nextUrl = questionPdfMap[fromQuestionNum + 1];
                 if (!nextUrl || pdfCache[nextUrl]) return;
@@ -2661,9 +2736,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 }
             }
 
-            // Dipanggil setiap kali navigasi soal (dari goToQuestion).
-            // Mengembalikan Promise yang selesai saat PDF soal tersebut siap/gagal,
-            // dipakai alur skeleton fullscreen untuk tahu kapan konten benar-benar siap.
             window.showPdfForQuestion = function(questionNum) {
                 const url = questionPdfMap[questionNum];
                 let promise;
@@ -2710,19 +2782,15 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                                 if (activeUrl === url) showPanelError('Gagal memuat PDF. Hubungi pengawas ujian.');
                             });
                         } else {
-                            // sudah ditangani internal, cegah unhandled rejection
                             promise = loadPdf(url).catch(() => {});
                         }
                     }
                 }
 
-                // Setelah soal ini ditangani, siapkan PDF soal berikutnya di background.
                 prefetchNextPdf(questionNum);
                 return promise;
             };
 
-            // Panggil sekali di awal untuk soal pertama, simpan promise-nya
-            // agar alur skeleton fullscreen tahu kapan PDF soal pertama selesai.
             window.__pdfSettled = window.showPdfForQuestion(currentQuestion || 1);
         })();
     </script>

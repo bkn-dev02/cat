@@ -591,6 +591,7 @@ if ($forceTabPpdb && $activeTab !== 'ppdb') {
                     data-exam-status="<?= htmlspecialchars($exam['exam_status'] ?? '') ?>"
                     data-published="<?= $exam['status'] === 'published' ? '1' : '0' ?>"
                     data-suspended="<?= !empty($exam['is_suspended']) ? '1' : '0' ?>"
+                    data-session-status="<?= htmlspecialchars($exam['session_status'] ?? '') ?>"
                     data-pdf="<?= htmlspecialchars($exam['exam_pdf'] ?? '') ?>"
                     data-start="<?= date('Y-m-d', strtotime($exam['start_time'])) ?>">
 
