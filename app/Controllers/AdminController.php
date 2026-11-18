@@ -256,6 +256,12 @@ class AdminController
         $serverNow = time();
         [$sessions, $timerData] = $this->prepareSessionView($sessions, $serverNow);
 
+        if (isset($_POST['reset_session_id'])) {
+            $message = $this->handleReset($user);
+        } elseif (isset($_POST['retake_session_id'])) {
+            $message = $this->handleRetake($user);
+        }
+
         view('admin/suspend-akun', [
             'message'      => $message,
             'keyword'      => $keyword,
@@ -268,7 +274,96 @@ class AdminController
         ]);
     }
 
-    /** Lanjutkan ujian siswa yang kena suspend/auto-submit karena pelanggaran. */
+    private const RETAKE_MAX_MINUTES = 60;
+
+    private function handleRetake(array $user): array
+    {
+        $sid     = (int)($_POST['retake_session_id'] ?? 0);
+        $minutes = filter_var($_POST['retake_duration_minutes'] ?? null, FILTER_VALIDATE_INT);
+
+        if ($sid <= 0) {
+            return $this->flashMessage('error', '❌ Session tidak valid.');
+        }
+        if ($minutes === false || $minutes === null || $minutes < 1 || $minutes > self::RETAKE_MAX_MINUTES) {
+            return $this->flashMessage('error', '❌ Durasi harus berupa angka 1 sampai ' . self::RETAKE_MAX_MINUTES . ' menit.');
+        }
+
+        $pdo = db();
+
+        try {
+            $pdo->beginTransaction();
+
+            $stmt = $pdo->prepare("
+                SELECT id, exam_id, status, submitted_at, started_at
+                FROM exam_sessions
+                WHERE id = ? AND user_id = ?
+                FOR UPDATE
+            ");
+            $stmt->execute([$sid, $user['id']]);
+            $s = $stmt->fetch();
+
+            if (!$s) {
+                $pdo->rollBack();
+                return $this->flashMessage('error', '❌ Session tidak ditemukan.');
+            }
+
+            $stmtExam = $pdo->prepare("SELECT title, end_time FROM exams WHERE id = ?");
+            $stmtExam->execute([$s['exam_id']]);
+            $exam = $stmtExam->fetch() ?: [];
+
+            if (!empty($exam['end_time']) && strtotime($exam['end_time']) <= time()) {
+                $pdo->rollBack();
+                return $this->flashMessage('error', '❌ Waktu ujian sudah berakhir. Retake tidak bisa diatur.');
+            }
+
+            $isWorkable = in_array($s['status'], ['active', 'in_progress'], true);
+            $isFinished = !empty($s['submitted_at']) && in_array($s['status'], ['submitted', 'completed'], true);
+            $isWaiting  = $isWorkable && empty($s['submitted_at']) && empty($s['started_at']);
+            $isRunning  = $isWorkable && empty($s['submitted_at']) && !empty($s['started_at']);
+
+            if ($isRunning) {
+                $pdo->rollBack();
+                return $this->flashMessage('error', '❌ Siswa sedang mengerjakan ujian ini. Durasi tidak dapat diubah.');
+            }
+            if (!$isFinished && !$isWaiting) {
+                $pdo->rollBack();
+                return $this->flashMessage('error', '❌ Session ini tidak dapat diatur ulang (status: ' . htmlspecialchars((string)$s['status']) . ').');
+            }
+
+            $pdo->prepare("
+                UPDATE exam_sessions
+                SET status            = 'active',
+                    token_status      = 'active',
+                    submitted_at      = NULL,
+                    score             = NULL,
+                    is_best_score     = 0,
+                    suspended_at      = NULL,
+                    suspension_reason = NULL,
+                    started_at        = NULL,
+                    remaining_time    = ?
+                WHERE id = ? AND user_id = ?
+            ")->execute([$minutes * 60, $sid, $user['id']]);
+
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('handleRetake failed: ' . $e->getMessage());
+            return $this->flashMessage('error', '❌ Gagal mengatur retake. Tidak ada data yang diubah.');
+        }
+
+        $examTitle = htmlspecialchars($exam['title'] ?? '');
+        $verb = $isWaiting ? 'Durasi ujian diubah' : 'Retake berhasil diatur';
+
+        return $this->flashMessage(
+            'success',
+            "✅ {$verb} untuk <b>\"$examTitle\"</b>. Durasi: <b>{$minutes} menit</b>. "
+                . "Waktu baru berjalan setelah siswa menekan Mulai di halaman Daftar Ujian. "
+                . "Jawaban dan histori pelanggaran tetap tersimpan."
+        );
+    }
+
     private function handleReset(array $user): array
     {
         $sid = (int)($_POST['reset_session_id'] ?? 0);
@@ -320,7 +415,7 @@ class AdminController
         $menit     = floor($finalRemaining / 60);
         $detik     = $finalRemaining % 60;
 
-                return $this->flashMessage(
+        return $this->flashMessage(
             'success',
             "Session ujian <b>\"$examTitle\"</b> berhasil dilanjutkan. "
                 . "Status diubah menjadi aktif, jawaban dan histori pelanggaran tetap tersimpan. "
@@ -363,25 +458,23 @@ class AdminController
                         'serverNow'      => $serverNow,
                     ];
                 } elseif (in_array($s['status'], ['active', 'in_progress'], true) && $startedAtTs === null) {
-                    // Siap dilanjutkan, tapi siswa belum mulai ujian lagi
+                    // Menunggu siswa menekan Mulai: waktu beku di durasi yang diinput admin.
                     $waitingForStudent = true;
-                    $effectiveRemaining = min($savedRem, $timeUntilEnd);
+                    $effectiveRemaining = $savedRem;
                     $timerData[$s['id']] = [
                         'type'           => 'waiting',
                         'savedRemaining' => $savedRem,
-                        'endTs'          => $examEnd,
                         'serverNow'      => $serverNow,
                     ];
                 } elseif (in_array($s['status'], ['active', 'in_progress'], true) && $startedAtTs !== null) {
-                    // Siswa sedang mengerjakan: hitung mundur berbasis started_at server
+                    // Siswa sedang mengerjakan: hitung mundur dari started_at server, tanpa endTs
                     $runningLive = true;
                     $elapsed = max(0, $serverNow - $startedAtTs);
-                    $effectiveRemaining = min(max(0, $savedRem - $elapsed), $timeUntilEnd);
+                    $effectiveRemaining = max(0, $savedRem - $elapsed);
                     $timerData[$s['id']] = [
                         'type'           => 'running',
                         'savedRemaining' => $savedRem,
                         'startedAtTs'    => $startedAtTs,
-                        'endTs'          => $examEnd,
                         'serverNow'      => $serverNow,
                     ];
                 } elseif ($s['status'] === 'suspended') {
@@ -406,11 +499,12 @@ class AdminController
                 && !$s['already_reset']
                 && in_array($s['status'], ['submitted', 'completed'], true)
             );
-            $s['status_label']      = $this->suspendStatusLabel($s, $canReset, $waitingForStudent);
+            $s['status_label']        = $this->suspendStatusLabel($s, $canReset, $waitingForStudent);
             $s['effective_remaining'] = $effectiveRemaining;
-            $s['remaining_minutes'] = floor($effectiveRemaining / 60);
-            $s['remaining_seconds'] = $effectiveRemaining % 60;
-            $s['exam_expired']  = $timeUntilEnd <= 0;
+            $s['remaining_minutes']   = floor($effectiveRemaining / 60);
+            $s['remaining_seconds']   = $effectiveRemaining % 60;
+            $s['exam_expired']        = $timeUntilEnd <= 0;
+            $s['can_change_duration'] = $waitingForStudent && !$s['exam_expired'];
             $s['reset_minutes'] = floor(min($resetRemaining, $timeUntilEnd > 0 ? $timeUntilEnd : $resetRemaining) / 60);
             $s['reset_seconds'] = min($resetRemaining, $timeUntilEnd > 0 ? $timeUntilEnd : $resetRemaining) % 60;
         }
@@ -496,10 +590,6 @@ class AdminController
         };
     }
 
-    /**
-     * Retake ujian untuk sesi yang sudah submit normal (tanpa pelanggaran).
-     * Admin/guru atur durasi baru, status menjadi 'active', jawaban lama tetap dipertahankan.
-     */
     public function retake($sessionId = null)
     {
         requireAuth();

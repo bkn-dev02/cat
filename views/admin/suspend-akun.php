@@ -551,9 +551,6 @@
         <?php if ($message): ?>
             <div class="alert alert-<?= $message['type'] ?>"><?= $message['text'] ?></div>
         <?php endif; ?>
-        <?php if (!empty($_GET['retake_success'])): ?>
-            <div class="alert alert-success">✅ Retake berhasil disimpan. Siswa dapat mulai ujian ulang dari halaman Daftar Ujian.</div>
-        <?php endif; ?>
 
         <div class="card search-card">
             <form method="GET" action="<?= config('app_url') ?>/admin/suspendAkun" class="search-form" role="search">
@@ -647,7 +644,10 @@
                                                 <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
                                             </span>
                                             <div style="font-size:.7rem; color:#6b7280; margin-top:2px">Menunggu siswa mulai</div>
-                                        <?php elseif (!empty($s['timer_running']) && !$s['exam_expired']): ?>
+                                        <?php elseif (!empty($s['waiting_for_student']) && $s['exam_expired']): ?>
+                                            <span style="color:#ef4444; font-size:.82rem; font-weight:600"><i class="fas fa-ban"></i> Berakhir</span>
+                                            <div style="font-size:.7rem; color:#6b7280; margin-top:2px">Siswa tidak bisa mulai</div>
+                                        <?php elseif (!empty($s['timer_running'])): ?>
                                             <span class="timer-realtime" data-session="<?= $s['id'] ?>">
                                                 <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
                                             </span>
@@ -656,7 +656,7 @@
                                             <span class="timer-realtime" data-session="<?= $s['id'] ?>">
                                                 <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
                                             </span>
-                                        <?php elseif ((!empty($s['waiting_for_student']) || !empty($s['timer_running']) || $s['can_reset']) && $s['exam_expired']): ?>
+                                        <?php elseif ($s['can_reset'] && $s['exam_expired']): ?>
                                             <span style="color:#ef4444; font-size:.82rem; font-weight:600"><i class="fas fa-ban"></i> Berakhir</span>
                                         <?php elseif (!$s['submitted_at'] && $s['status'] !== 'completed' && isset($timerData[$s['id']])): ?>
                                             <span class="timer-realtime" data-session="<?= $s['id'] ?>">
@@ -668,13 +668,21 @@
                                     </td>
                                     <td style="padding-right:20px">
                                         <?php if (!empty($s['waiting_for_student'])): ?>
-                                            <span style="color:#2563eb; font-weight:600; font-size:.82rem"><i class="fas fa-hourglass-half"></i> Menunggu Siswa</span>
+                                            <?php if (!empty($s['can_change_duration'])): ?>
+                                                <button type="button" class="btn btn-info btn-sm"
+                                                    onclick="openRetakeModal(<?= (int)$s['id'] ?>, <?= (int)min(60, max(1, (int)ceil($s['effective_remaining'] / 60))) ?>, 'edit')">
+                                                    <i class="fas fa-clock"></i> Ubah durasi
+                                                </button>
+                                            <?php else: ?>
+                                                <span style="color:#2563eb; font-weight:600; font-size:.82rem"><i class="fas fa-hourglass-half"></i> Menunggu Siswa</span>
+                                            <?php endif; ?>
                                         <?php elseif (!empty($s['timer_running'])): ?>
                                             <span style="color:#10b981; font-weight:600; font-size:.82rem"><i class="fas fa-circle"></i> Sedang Dikerjakan</span>
                                         <?php elseif ($s['already_reset']): ?>
                                             <span style="color:#10b981; font-weight:600; font-size:.82rem"><i class="fas fa-play"></i> Sedang Aktif</span>
-                                        <?php elseif ($s['status'] === 'submitted'): ?>
-                                            <button type="button" class="btn btn-info btn-sm" onclick="openRetakeModal(<?= (int)$s['id'] ?>, <?= (int)($s['duration'] ?? 0) ?>)">
+                                        <?php elseif (!empty($s['can_retake'])): ?>
+                                            <button type="button" class="btn btn-info btn-sm"
+                                                onclick="openRetakeModal(<?= (int)$s['id'] ?>, <?= (int)min(60, max(1, (int)($s['duration'] ?? 60))) ?>, 'retake')">
                                                 <i class="fas fa-redo"></i> Retake
                                             </button>
                                         <?php elseif ($s['status'] === 'suspended'): ?>
@@ -730,7 +738,10 @@
                                             <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
                                         </span>
                                         <div style="font-size:.7rem;color:#6b7280">Menunggu siswa mulai</div>
-                                    <?php elseif (!empty($s['timer_running']) && !$s['exam_expired']): ?>
+                                    <?php elseif (!empty($s['waiting_for_student']) && $s['exam_expired']): ?>
+                                        <div class="val" style="color:#ef4444">Berakhir</div>
+                                        <div style="font-size:.7rem;color:#6b7280">Siswa tidak bisa mulai</div>
+                                    <?php elseif (!empty($s['timer_running'])): ?>
                                         <span class="timer-realtime val" data-session="<?= $s['id'] ?>">
                                             <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
                                         </span>
@@ -739,7 +750,7 @@
                                         <span class="timer-realtime val" data-session="<?= $s['id'] ?>">
                                             <?= sprintf('%02d:%02d', $s['remaining_minutes'], $s['remaining_seconds']) ?>
                                         </span>
-                                    <?php elseif ((!empty($s['waiting_for_student']) || !empty($s['timer_running']) || $s['can_reset']) && $s['exam_expired']): ?>
+                                    <?php elseif ($s['can_reset'] && $s['exam_expired']): ?>
                                         <div class="val" style="color:#ef4444">Berakhir</div>
                                     <?php elseif (!$s['submitted_at'] && $s['status'] !== 'completed' && isset($timerData[$s['id']])): ?>
                                         <span class="timer-realtime val" data-session="<?= $s['id'] ?>">
@@ -758,13 +769,21 @@
                             </div>
                             <div class="session-card-footer">
                                 <?php if (!empty($s['waiting_for_student'])): ?>
-                                    <div style="text-align:center;color:#2563eb;font-weight:600;font-size:.85rem"><i class="fas fa-hourglass-half"></i> Siap dilanjutkan, menunggu siswa mulai</div>
+                                    <?php if (!empty($s['can_change_duration'])): ?>
+                                        <button type="button" class="btn btn-info btn-block"
+                                            onclick="openRetakeModal(<?= (int)$s['id'] ?>, <?= (int)min(60, max(1, (int)ceil($s['effective_remaining'] / 60))) ?>, 'edit')">
+                                            <i class="fas fa-clock"></i> Ubah durasi
+                                        </button>
+                                    <?php else: ?>
+                                        <div style="text-align:center;color:#2563eb;font-weight:600;font-size:.85rem"><i class="fas fa-hourglass-half"></i> Siap dilanjutkan, menunggu siswa mulai</div>
+                                    <?php endif; ?>
                                 <?php elseif (!empty($s['timer_running'])): ?>
                                     <div style="text-align:center;color:#10b981;font-weight:600;font-size:.85rem"><i class="fas fa-circle"></i> Sedang dikerjakan siswa</div>
                                 <?php elseif ($s['already_reset']): ?>
                                     <div style="text-align:center;color:#10b981;font-weight:600;font-size:.85rem"><i class="fas fa-play"></i> Sedang Aktif</div>
-                                <?php elseif ($s['status'] === 'submitted'): ?>
-                                    <button type="button" class="btn btn-info btn-block" onclick="openRetakeModal(<?= (int)$s['id'] ?>, <?= (int)($s['duration'] ?? 0) ?>)">
+                                <?php elseif (!empty($s['can_retake'])): ?>
+                                    <button type="button" class="btn btn-info btn-block"
+                                        onclick="openRetakeModal(<?= (int)$s['id'] ?>, <?= (int)min(60, max(1, (int)($s['duration'] ?? 60))) ?>, 'retake')">
                                         <i class="fas fa-redo"></i> Retake
                                     </button>
                                 <?php elseif ($s['status'] === 'suspended'): ?>
@@ -793,79 +812,62 @@
     <div id="retakeModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; align-items:center; justify-content:center;">
         <div style="background:white; max-width:450px; width:90%; border-radius:1rem; padding:1.5rem; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                <h3 style="margin:0; font-size:1.1rem; font-weight:700;"><i class="fas fa-redo"></i> Atur Durasi Retake</h3>
-                <button onclick="closeRetakeModal()" style="background:none; border:none; color:#64748b; font-size:1.25rem; cursor:pointer;">&times;</button>
+                <h3 id="retakeModalTitle" style="margin:0; font-size:1.1rem; font-weight:700;"><i class="fas fa-redo"></i> Atur Durasi Retake</h3>
+                <button type="button" onclick="closeRetakeModal()" style="background:none; border:none; color:#64748b; font-size:1.25rem; cursor:pointer;">&times;</button>
             </div>
-            <form id="retakeForm" method="POST" action="<?= config('app_url') ?>/admin/retake/" onsubmit="return handleRetakeSubmit(event)">
-                <input type="hidden" name="session_id" id="retakeSessionId">
+            <form id="retakeForm" method="POST"
+                action="<?= config('app_url') ?>/admin/suspendAkun?q=<?= urlencode($keyword) ?>&user_id=<?= (int)$userId ?>"
+                onsubmit="document.getElementById('retakeSubmitBtn').disabled = true;">
+                <input type="hidden" name="retake_session_id" id="retakeSessionId">
                 <div style="margin-bottom:1rem;">
-                    <label style="display:block; font-size:.875rem; font-weight:600; color:#374151; margin-bottom:.375rem;">Durasi retake (menit)</label>
-                    <input type="number" name="duration_minutes" id="retakeDurationMinutes" min="1" value="60" style="width:100%; padding:.625rem; border:1px solid #e2e8f0; border-radius:.5rem; font-size:1rem;" required>
-                    <p style="font-size:.75rem; color:#64748b; margin-top:.25rem;">Durasi baru untuk mengerjakan ulang ujian ini.</p>
+                    <label style="display:block; font-size:.875rem; font-weight:600; color:#374151; margin-bottom:.375rem;">Durasi (menit)</label>
+                    <input type="number" name="retake_duration_minutes" id="retakeDurationMinutes" min="1" max="60" step="1" value="60"
+                        style="width:100%; padding:.625rem; border:1px solid #e2e8f0; border-radius:.5rem; font-size:1rem;" required>
+                    <p id="retakeModalHint" style="font-size:.75rem; color:#64748b; margin-top:.25rem;">Maksimal 60 menit. Waktu baru berjalan setelah siswa menekan Mulai.</p>
                 </div>
                 <div style="display:flex; gap:.75rem; justify-content:flex-end;">
                     <button type="button" onclick="closeRetakeModal()" style="padding:.625rem 1.25rem; border:1px solid #e2e8f0; border-radius:.5rem; background:#f8fafc; color:#475569; font-weight:600; cursor:pointer;">Batal</button>
-                    <button type="submit" style="padding:.625rem 1.25rem; border:none; border-radius:.5rem; background:#6366f1; color:white; font-weight:600; cursor:pointer;">Simpan</button>
+                    <button type="submit" id="retakeSubmitBtn" style="padding:.625rem 1.25rem; border:none; border-radius:.5rem; background:#6366f1; color:white; font-weight:600; cursor:pointer;">Simpan</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <?php if (!empty($timerData)): ?>
-        <script>
-            const TIMER_DATA = <?= json_encode($timerData) ?>;
-            const PAGE_LOAD_TS = Math.floor(Date.now() / 1000);
-
-            function fmt(secs) {
-                if (secs <= 0) return '00:00';
-                const m = Math.floor(secs / 60);
-                const s = secs % 60;
-                return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-            }
-
-            function calcRemaining(data) {
-                const nowBrowser = Math.floor(Date.now() / 1000);
-                const browserElapsed = nowBrowser - PAGE_LOAD_TS;
-                const nowServer = data.serverNow + browserElapsed;
-                let remaining;
-
-                if (data.type === 'suspended' || data.type === 'waiting') {
-                    remaining = data.savedRemaining;
-                } else if (data.type === 'running') {
-                    if (data.startedAtTs) {
-                        remaining = data.savedRemaining - (nowServer - data.startedAtTs);
-                    } else {
-                        remaining = data.savedRemaining;
-                    }
-                } else {
-                    remaining = data.savedRemaining - browserElapsed;
-                }
-
-                if (data.endTs) {
-                    const timeUntilEnd = data.endTs - nowServer;
-                    remaining = Math.min(remaining, timeUntilEnd);
-                }
-
-                return Math.max(0, Math.floor(remaining));
-            }
-
-            function colorClass(secs, type) {
-                if (secs <= 0) return 'expired';
-                if (type === 'running') return 'active';
-                if (type === 'waiting' || type === 'suspended') {
-                    if (secs < 60) return 'urgent';
-                    if (secs < 300) return 'warning';
-                    return 'ok';
-                }
-                if (secs < 60) return 'urgent';
-                if (secs < 300) return 'warning';
-                return 'ok';
-            }
-        </script>
-    <?php endif; ?>
-
     <script>
-        // fungsi retake dan update waktu
+        const TIMER_DATA = <?= json_encode($timerData ?? [], JSON_UNESCAPED_UNICODE) ?>;
+        const PAGE_LOAD_TS = Math.floor(Date.now() / 1000);
+        const MAX_RETAKE_MINUTES = 60;
+
+        function fmt(secs) {
+            if (secs <= 0) return '00:00';
+            const m = Math.floor(secs / 60);
+            const s = secs % 60;
+            return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        }
+
+        // suspended / waiting: beku. running: jalan dari started_at (jam server).
+        function calcRemaining(data) {
+            const browserElapsed = Math.floor(Date.now() / 1000) - PAGE_LOAD_TS;
+            const nowServer = data.serverNow + browserElapsed;
+            let remaining = data.savedRemaining;
+
+            if (data.type === 'running' && data.startedAtTs) {
+                remaining = data.savedRemaining - Math.max(0, nowServer - data.startedAtTs);
+            }
+            if (data.endTs) {
+                remaining = Math.min(remaining, data.endTs - nowServer);
+            }
+            return Math.max(0, Math.floor(remaining));
+        }
+
+        function colorClass(secs, type) {
+            if (secs <= 0) return 'expired';
+            if (type === 'running') return 'active';
+            if (secs < 60) return 'urgent';
+            if (secs < 300) return 'warning';
+            return 'ok';
+        }
+
         function updateAllTimers() {
             document.querySelectorAll('.timer-realtime[data-session]').forEach(el => {
                 const sid = el.dataset.session;
@@ -896,39 +898,19 @@
         updateAllTimers();
         setInterval(updateAllTimers, 1000);
 
-        function openRetakeModal(sessionId, defaultDuration) {
+        function openRetakeModal(sessionId, defaultMinutes, mode) {
+            const minutes = Math.min(MAX_RETAKE_MINUTES, Math.max(1, parseInt(defaultMinutes, 10) || MAX_RETAKE_MINUTES));
             document.getElementById('retakeSessionId').value = sessionId;
-            document.getElementById('retakeDurationMinutes').value = defaultDuration > 0 ? defaultDuration : 60;
-            document.getElementById('retakeForm').action = '<?= config('app_url') ?>/admin/retake/' + sessionId;
+            document.getElementById('retakeDurationMinutes').value = minutes;
+            document.getElementById('retakeSubmitBtn').disabled = false;
+            document.getElementById('retakeModalTitle').innerHTML = mode === 'edit' ?
+                '<i class="fas fa-clock"></i> Ubah Durasi' :
+                '<i class="fas fa-redo"></i> Atur Durasi Retake';
+            document.getElementById('retakeModalHint').textContent = mode === 'edit' ?
+                'Durasi baru menggantikan durasi sebelumnya. Maksimal 60 menit. Waktu baru berjalan setelah siswa menekan Mulai.' :
+                'Maksimal 60 menit. Waktu baru berjalan setelah siswa menekan Mulai.';
             document.getElementById('retakeModal').style.display = 'flex';
-        }
-
-        function handleRetakeSubmit(e) {
-            e.preventDefault();
-            const form = document.getElementById('retakeForm');
-            const formData = new FormData(form);
-
-            fetch(form.action, {
-                    method: 'POST',
-                    body: formData,
-                    credentials: 'same-origin'
-                })
-                .then(r => r.json())
-                .then(result => {
-                    if (result.success) {
-                        alert(result.message);
-                        closeRetakeModal();
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('retake_success', '1');
-                        window.location.href = url.toString();
-                    } else {
-                        alert('Gagal: ' + (result.message || 'Terjadi kesalahan'));
-                    }
-                })
-                .catch(() => {
-                    alert('Gagal terhubung ke server.');
-                });
-            return false;
+            document.getElementById('retakeDurationMinutes').focus();
         }
 
         function closeRetakeModal() {
@@ -936,9 +918,10 @@
         }
 
         document.getElementById('retakeModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeRetakeModal();
-            }
+            if (e.target === this) closeRetakeModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeRetakeModal();
         });
 
         function confirmReset(form, title) {
