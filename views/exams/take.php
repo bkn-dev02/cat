@@ -551,7 +551,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             max-width: none;
         }
         /* Page loader / skeleton */
-        #page-loader{position:fixed;inset:0;z-index:9999998;background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:20px}
+        #page-loader{position:fixed;inset:0;z-index:10000000;background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:20px}
         #page-loader .pl-card{width:min(900px,100%);background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
         .skel{background:linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 37%,#e5e7eb 63%);background-size:400% 100%;animation:skel 1.2s ease-in-out infinite;border-radius:8px}
         @keyframes skel{0%{background-position:100% 0}100%{background-position:0 0}}
@@ -1525,7 +1525,7 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
 
         function syncTimerFromServer() {
             const baseUrl = '<?= function_exists('config') ? config('app_url') : '' ?>';
-            fetch(`${baseUrl}/exam/getRemainingTime/${sessionId}`)
+            return fetch(`${baseUrl}/exam/getRemainingTime/${sessionId}`)
                 .then(r => r.json())
                 .then(data => {
                     if (data.success && data.remaining_time !== undefined) {
@@ -1928,28 +1928,45 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                             el.style.visibility = 'visible';
                         });
                         MathJax.typesetPromise().then(function() {
-                            document.querySelectorAll('.question-card').forEach(el => {
+                            document.querySelectorAll('.question-card').forEach(function(el) {
                                 if (!el.classList.contains('active')) {
                                     el.style.display = 'none';
                                 }
                             });
-                        }).catch(err => console.log(err));
+                            // [FIX-SKELETON] skeleton tampil selama memuat; disembunyikan saat konten siap
+                            // (jangan mengganggu skeleton fullscreen yang sedang aktif)
+                            if (!skeletonShownAt) hidePageLoader();
+                        }).catch(err => {
+                            console.log(err);
+                            if (!skeletonShownAt) hidePageLoader();
+                        });
                     } else if (attempt < 20) {
                         setTimeout(() => tryRender(attempt + 1), 300);
+                    } else {
+                        // MathJax tidak kunjung siap -> tetap tampilkan konten
+                        if (!skeletonShownAt) hidePageLoader();
                     }
                 }
                 tryRender(0);
             }, 500);
 
+            // [FIX-SKELETON] failsafe: jangan biarkan skeleton menggantung bila MathJax gagal dimuat
+            // (jangan mengganggu skeleton fullscreen yang sedang aktif)
+            setTimeout(function () { if (!skeletonShownAt) hidePageLoader(); }, 6000);
+
             // [FIX-FS] tombol layar penghalang fullscreen
-            hidePageLoader();
             const fullscreenBtn = document.getElementById('start-fullscreen-btn');
             if (fullscreenBtn) {
                 fullscreenBtn.addEventListener('click', function() {
+                    // [SKELETON-FULLSCREEN] tampilkan skeleton selama transisi + persiapan ujian
+                    showPageLoader();
                     requestFullscreen().then(function() {
                         hideFullscreenGate();
                         unlockExam();
                     }).catch(function() {
+                        // fullscreen ditolak browser -> pulihkan gate, jangan tinggalkan skeleton
+                        hidePageLoader();
+                        showFullscreenGate();
                         console.log('Fullscreen request denied by browser');
                     });
                 });
@@ -1971,6 +1988,49 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 if (syncTimerInterval) clearInterval(syncTimerInterval);
             }
 
+        // === [SKELETON-FULLSCREEN] Skeleton saat klik "Mulai Ujian (Fullscreen)" ===
+        // Tampil minimal 2 detik, dan ikut menyesuaikan bila PDF/jaringan lambat,
+        // dengan batas atas 15 detik agar tidak menggantung.
+        const MIN_SKELETON_MS = 2000;
+        const MAX_SKELETON_MS = 15000;
+        let skeletonShownAt = 0;
+        let skeletonHideScheduled = false;
+
+        function showPageLoader() {
+            const l = document.getElementById('page-loader');
+            if (l) {
+                l.style.display = 'flex';
+                skeletonShownAt = Date.now();
+                skeletonHideScheduled = false;
+            }
+        }
+
+        function scheduleSkeletonHideAfterReady(timerPromise) {
+            if (skeletonHideScheduled) return;
+            if (!skeletonShownAt) { hidePageLoader(); return; } // tidak ada skeleton aktif
+            skeletonHideScheduled = true;
+
+            const elapsed = Date.now() - skeletonShownAt;
+            const minRemaining = Math.max(0, MIN_SKELETON_MS - elapsed);
+
+            const pdfReady = (window.__pdfSettled && typeof window.__pdfSettled.then === 'function')
+                ? window.__pdfSettled
+                : Promise.resolve();
+            const timerReady = (timerPromise && typeof timerPromise.then === 'function')
+                ? timerPromise.catch(function () {})
+                : Promise.resolve();
+
+            const ready = Promise.all([pdfReady, timerReady]).catch(function () {});
+            const cap = new Promise(function (resolve) { setTimeout(resolve, MAX_SKELETON_MS); });
+
+            Promise.race([ready, cap]).then(function () {
+                setTimeout(function () {
+                    if (!skeletonHideScheduled) return;
+                    hidePageLoader();
+                }, minRemaining);
+            });
+        }
+
         function hidePageLoader(){ var l=document.getElementById('page-loader'); if(l) l.style.display='none'; }
         function showPageError(msg){ hidePageLoader(); var e=document.getElementById('page-error'); if(!e) return; var m=document.getElementById('page-error-msg'); if(m && msg) m.textContent=msg; e.style.display='flex'; }
         window.addEventListener('error', function(ev){
@@ -1982,7 +2042,6 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
         window.addEventListener('unhandledrejection', function(){ /* handled by in-app retries */ });
 
         function unlockExam() {
-                hidePageLoader();
                 var elTimer = document.getElementById('timer');
                 var elInfo = document.querySelector('.exam-info');
                 var elMain = document.querySelector('.main-container');
@@ -1994,11 +2053,13 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 antiCheatReady = true;
                 timerInterval = setInterval(updateTimer, 1000);
                 syncTimerInterval = setInterval(syncTimerFromServer, 5000);
-                syncTimerFromServer();
+                var firstSync = syncTimerFromServer();
                 updateTimer();
                 updateNavigationDisplay();
                 updateDoubtButton();
                 goToQuestion(1);
+                // [SKELETON-FULLSCREEN] sembunyikan skeleton setelah konten siap (min 2 dtk)
+                scheduleSkeletonHideAfterReady(firstSync);
             }
 
             document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -2601,57 +2662,68 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
             }
 
             // Dipanggil setiap kali navigasi soal (dari goToQuestion).
+            // Mengembalikan Promise yang selesai saat PDF soal tersebut siap/gagal,
+            // dipakai alur skeleton fullscreen untuk tahu kapan konten benar-benar siap.
             window.showPdfForQuestion = function(questionNum) {
                 const url = questionPdfMap[questionNum];
+                let promise;
 
                 if (!url) {
                     activeUrl = null;
                     panel.style.display = 'none';
                     if (examContentEl) examContentEl.classList.add('full-width');
-                    return;
-                }
+                    promise = Promise.resolve();
+                } else {
+                    panel.style.display = '';
+                    if (examContentEl) examContentEl.classList.remove('full-width');
 
-                panel.style.display = '';
-                if (examContentEl) examContentEl.classList.remove('full-width');
+                    if (url === activeUrl) {
+                        promise = Promise.resolve();
+                    } else {
+                        activeUrl = url;
 
-                if (url === activeUrl) return;
-                activeUrl = url;
-
-                const cached = pdfCache[url];
-                if (cached && cached.doc) {
-                    touchCacheEntry(url);
-                    document.getElementById('pdf-page-count').textContent = cached.numPages;
-                    currentPage = 1;
-                    setPanelState('ready');
-                    fitToWidth();
-                } else if (cached && cached.failed) {
-                    showPanelError('Gagal memuat PDF. Hubungi pengawas ujian.');
-                } else if (cached && cached.loading) {
-                    setPanelState('loading');
-                    cached.loadingPromise.then(() => {
-                        if (activeUrl !== url) return;
-                        const c = pdfCache[url];
-                        if (c && c.doc) {
-                            document.getElementById('pdf-page-count').textContent = c.numPages;
+                        const cached = pdfCache[url];
+                        if (cached && cached.doc) {
+                            touchCacheEntry(url);
+                            document.getElementById('pdf-page-count').textContent = cached.numPages;
                             currentPage = 1;
                             setPanelState('ready');
-                            renderPage(currentPage);
-                        } else {
+                            fitToWidth();
+                            promise = Promise.resolve();
+                        } else if (cached && cached.failed) {
                             showPanelError('Gagal memuat PDF. Hubungi pengawas ujian.');
+                            promise = Promise.resolve();
+                        } else if (cached && cached.loading) {
+                            setPanelState('loading');
+                            promise = cached.loadingPromise.then(() => {
+                                if (activeUrl !== url) return;
+                                const c = pdfCache[url];
+                                if (c && c.doc) {
+                                    document.getElementById('pdf-page-count').textContent = c.numPages;
+                                    currentPage = 1;
+                                    setPanelState('ready');
+                                    renderPage(currentPage);
+                                } else {
+                                    showPanelError('Gagal memuat PDF. Hubungi pengawas ujian.');
+                                }
+                            }).catch(() => {
+                                if (activeUrl === url) showPanelError('Gagal memuat PDF. Hubungi pengawas ujian.');
+                            });
+                        } else {
+                            // sudah ditangani internal, cegah unhandled rejection
+                            promise = loadPdf(url).catch(() => {});
                         }
-                    }).catch(() => {
-                        if (activeUrl === url) showPanelError('Gagal memuat PDF. Hubungi pengawas ujian.');
-                    });
-                } else {
-                    loadPdf(url).catch(() => {}); // sudah ditangani internal, cegah unhandled rejection
+                    }
                 }
 
                 // Setelah soal ini ditangani, siapkan PDF soal berikutnya di background.
                 prefetchNextPdf(questionNum);
+                return promise;
             };
 
-            // Panggil sekali di awal untuk soal pertama.
-            showPdfForQuestion(currentQuestion || 1);
+            // Panggil sekali di awal untuk soal pertama, simpan promise-nya
+            // agar alur skeleton fullscreen tahu kapan PDF soal pertama selesai.
+            window.__pdfSettled = window.showPdfForQuestion(currentQuestion || 1);
         })();
     </script>
 </body>
