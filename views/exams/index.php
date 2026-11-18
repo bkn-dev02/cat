@@ -526,7 +526,6 @@ if ($forceTabPpdb && $activeTab !== 'ppdb') {
             };
         }
     </script>
-    <!-- Script MathJax dimuat oleh navbar.php agar tidak double-load -->
 </head>
 
 <body>
