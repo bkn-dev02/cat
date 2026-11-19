@@ -1454,14 +1454,14 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
         });
 
         document.addEventListener('visibilitychange', function() {
-            if (!antiCheatReady || isSubmitting) return;
+            if (isSubmitting) return;
             if (document.hidden) {
                 recordViolation('Berpindah tab/aplikasi');
             }
         });
 
         window.addEventListener('blur', function() {
-            if (!antiCheatReady || isSubmitting) return;
+            if (isSubmitting) return;
             recordViolation('Keluar window/fokus');
         });
 
@@ -2161,6 +2161,8 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 goToQuestion(1);
                 scheduleSkeletonHideAfterReady(firstSync);
             }
+            window.unlockExam = unlockExam;
+            window.lockExam = (typeof lockExam === 'function') ? lockExam : window.lockExam;
 
             document.addEventListener('fullscreenchange', handleFullscreenChange);
             document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
@@ -2236,12 +2238,12 @@ $isSuspended = ($session['status'] ?? '') === 'suspended';
                 isFullscreen = true;
                 hideViolationWarning();
                 hideFullscreenGate();
-                unlockExam();
+                if (typeof window.unlockExam === 'function') window.unlockExam();
             } else {
                 isFullscreen = false;
                 if (!isSubmitting) {
                     recordViolation('Keluar dari fullscreen');
-                    lockExam();
+                    if (typeof window.lockExam === 'function') window.lockExam();
                     requestFullscreen();
                     setTimeout(() => {
                         if (!isSubmitting && !isFullscreen) requestFullscreen();
