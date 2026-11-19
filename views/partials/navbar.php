@@ -120,7 +120,7 @@ $currentPage = $_GET['url'] ?? '';
                             <a class="nav-link <?= strpos($currentPage, 'admin/suspendAkun') !== false ? 'active' : '' ?>"
                                 href="<?= config('app_url') ?>/admin/suspendAkun">
                                 <i class="fas fa-undo-alt"></i>
-                                <span>Reset Suspend</span>
+                                <span>Reset Ujian</span>
                             </a>
                         </li>
                     <?php endif; ?>
@@ -151,7 +151,7 @@ $currentPage = $_GET['url'] ?? '';
                         <a class="nav-link <?= strpos($currentPage, 'admin/suspendAkun') !== false ? 'active' : '' ?>"
                             href="<?= config('app_url') ?>/admin/suspendAkun">
                             <i class="fas fa-undo-alt"></i>
-                            <span>Reset Suspend</span>
+                            <span>Reset Ujian</span>
                         </a>
                     </li>
                 <?php endif; ?>

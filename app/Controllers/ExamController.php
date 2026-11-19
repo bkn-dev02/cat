@@ -192,7 +192,9 @@ class ExamController
                 if ($hasCreatedBy) $params[] = $user['id'];
 
                 // Hitung total untuk pagination
-                $countSql = "SELECT COUNT(*) FROM exams e LEFT JOIN subjects s ON e.subject_id = s.id WHERE 1=1 " . ($hasCategory ? "AND e.category = ?" : "") . ($hasCreatedBy ? "AND e.created_by = ?" : "");
+                $countSql = "SELECT COUNT(*) FROM exams e LEFT JOIN subjects s ON e.subject_id = s.id WHERE 1=1"
+                    . ($hasCategory  ? " AND e.category = ?"   : "")
+                    . ($hasCreatedBy ? " AND e.created_by = ?" : "");
                 $stmtCount = db()->prepare($countSql);
                 $stmtCount->execute($params);
                 $totalExams = (int)$stmtCount->fetchColumn();

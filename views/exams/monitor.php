@@ -277,6 +277,86 @@
         const baseUrl = '<?= config('app_url') ?>';
         let lastSubmittedCount = 0;
         let lastActiveCount = 0;
+        let monitorSessions = new Map();
+
+        function actionButtonsHtml(s, mobile) {
+            const isRunning = s.status === 'active' || s.status === 'in_progress';
+            const isSuspended = s.status === 'suspended';
+
+            if (!isRunning && !isSuspended) {
+                return mobile ? '' : '<span style="color:#94a3b8;font-size:11px">-</span>';
+            }
+
+            const size = mobile ? 'padding:8px 16px;font-size:12px;border-radius:6px' :
+                                'padding:4px 8px;font-size:11px;border-radius:4px';
+            const base = `border:0;font-weight:600;${size}`;
+
+            const stateBtn = isSuspended ?
+                `<button type="button" class="resume-btn" data-session-id="${Number(s.id)}" style="${base};background:#10b981;color:white;cursor:pointer"><i class="fas fa-play"></i> Lanjutkan</button>` :
+                `<button type="button" disabled style="${base};background:#e2e8f0;color:#64748b;cursor:not-allowed">Active</button>`;
+
+            const addBtn = `<button type="button" onclick="promptAddDuration(${Number(s.id)})" style="${base};background:#6366f1;color:white;cursor:pointer">+ Waktu</button>`;
+
+            const wrapStyle = mobile ?
+                'display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px' :
+                'display:flex;gap:6px;flex-wrap:wrap';
+
+            return `<div style="${wrapStyle}">${stateBtn}${addBtn}</div>`;
+        }
+
+        async function resumeSession(sessionId, btn) {
+            const s = monitorSessions.get(String(sessionId));
+            if (!s) {
+                alert('Data siswa tidak ditemukan. Muat ulang halaman.');
+                return;
+            }
+            const name = s.full_name || s.username || 'siswa ini';
+
+            if (!confirm(
+                    'Lanjutkan ujian untuk ' + name + '?\n\n' +
+                    'Status akan diubah menjadi aktif dan jawaban/histori pelanggaran tetap tersimpan.\n' +
+                    'Waktu hanya akan berjalan setelah siswa mulai ujian kembali.\n\n' +
+                    'Lanjutkan?'
+                )) return;
+
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Memproses...';
+            }
+
+            try {
+                // Request yang sama dengan form "Lanjutkan Ujian" di halaman Suspend Akun
+                await fetch(`${baseUrl}/admin/suspendAkun?user_id=${encodeURIComponent(s.user_id)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'reset_session_id=' + encodeURIComponent(sessionId),
+                    credentials: 'same-origin'
+                });
+
+                // Hasil dinilai dari status terbaru di database
+                const r = await fetch(`${baseUrl}/exam/monitorData/${examId}`, {
+                    credentials: 'same-origin'
+                });
+                const result = await r.json();
+                if (!result.success) throw new Error(result.message || 'Gagal memuat data');
+
+                updateStats(result.summary);
+                updateStudentsList(result.data);
+
+                const after = result.data.find(x => String(x.id) === String(sessionId));
+                if (after && after.status !== 'suspended') {
+                    showToast('Ujian ' + name + ' dilanjutkan', 'success');
+                } else {
+                    alert('Sesi belum berhasil dilanjutkan. Coba lewat halaman Suspend Akun untuk melihat alasannya.');
+                }
+            } catch (err) {
+                console.error('Resume error:', err);
+                alert('Gagal terhubung ke server.');
+                fetchData();
+            }
+        }
 
         function formatTime(seconds) {
             if (!seconds || seconds < 0) return '00:00';
@@ -315,6 +395,7 @@
         }
 
         function updateStudentsList(sessions) {
+            monitorSessions = new Map(sessions.map(x => [String(x.id), x]));
             if (sessions.length === 0) {
                 document.getElementById('students-container').innerHTML = `
                     <div style="text-align:center;padding:3rem;color:#64748b">
@@ -370,10 +451,7 @@
                             ${s.submitted_at ? `<span><i class="fas fa-check"></i> ${new Date(s.submitted_at).toLocaleTimeString('id-ID')}</span>` : ''}
                         </div>
                         ${violationHtml}
-                        ${(s.status === 'active' || s.status === 'in_progress' || s.status === 'suspended') ?
-                            `<button type="button" onclick="promptAddDuration(${Number(s.id)})" style="margin-top:8px;background:#6366f1;color:white;border:0;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:block;margin:8px auto 0 auto;width:fit-content">+ Tambah Waktu</button>` :
-                            ''
-                        }
+                        ${actionButtonsHtml(s, true)}
                     </div>`;
                 });
                 document.getElementById('students-container').innerHTML = cards;
@@ -427,12 +505,7 @@
                         <td style="font-size:13px;color:#374151">${(s.status === 'active' || s.status === 'in_progress') ? formatTime(s.remaining_seconds) : '-'}</td>
                         <td style="font-size:13px;color:#374151">${submitTime}</td>
                         <td>${violationInfo || '<span style="color:#94a3b8;font-size:12px">-</span>'}</td>
-                        <td>
-                            ${(s.status === 'active' || s.status === 'in_progress' || s.status === 'suspended') ?
-                                `<button type="button" onclick="promptAddDuration(${Number(s.id)})" style="background:#6366f1;color:white;border:0;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer">+ Waktu</button>` :
-                                `<span style="color:#94a3b8;font-size:11px">-</span>`
-                            }
-                        </td>
+                        <td>${actionButtonsHtml(s, false)}</td>
                     </tr>`;
                 });
 
@@ -446,7 +519,7 @@
                                 <th style="min-width:110px">Waktu Tersisa</th>
                                 <th style="min-width:100px">Waktu Submit</th>
                                 <th style="min-width:140px">Pelanggaran</th>
-                                <th style="min-width:100px">Aksi</th>
+                                <th style="min-width:170px">Aksi</th>
                             </tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
@@ -459,6 +532,10 @@
                     const session = sessionsById.get(button.dataset.sessionId);
                     if (session) showViolations(session.full_name || '-', session.id);
                 });
+            });
+
+            document.querySelectorAll('.resume-btn').forEach(button => {
+                button.addEventListener('click', () => resumeSession(button.dataset.sessionId, button));
             });
         }
 
