@@ -288,7 +288,7 @@
             }
 
             const size = mobile ? 'padding:8px 16px;font-size:12px;border-radius:6px' :
-                                'padding:4px 8px;font-size:11px;border-radius:4px';
+                'padding:4px 8px;font-size:11px;border-radius:4px';
             const base = `border:0;font-weight:600;${size}`;
 
             const stateBtn = isSuspended ?
@@ -610,24 +610,24 @@
                 return;
             }
             fetch(`${baseUrl}/exam/addDuration/${sessionId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: 'additional_minutes=' + encodeURIComponent(m)
-            })
-            .then(r => r.json())
-            .then(result => {
-                if (result.success) {
-                    alert(result.message);
-                    fetchData();
-                } else {
-                    alert('Gagal: ' + (result.message || 'Terjadi kesalahan'));
-                }
-            })
-            .catch(() => {
-                alert('Gagal terhubung ke server.');
-            });
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'additional_minutes=' + encodeURIComponent(m)
+                })
+                .then(r => r.json())
+                .then(result => {
+                    if (result.success) {
+                        alert(result.message);
+                        fetchData();
+                    } else {
+                        alert('Gagal: ' + (result.message || 'Terjadi kesalahan'));
+                    }
+                })
+                .catch(() => {
+                    alert('Gagal terhubung ke server.');
+                });
         }
     </script>
 
