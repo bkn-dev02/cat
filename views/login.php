@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,17 +18,49 @@
     <link href="<?= asset_url('vendor/fonts/plus-jakarta-sans.css') ?>" rel="stylesheet">
     <!-- Fallback CSS kritis — aktif di semua kondisi jaringan (termasuk Electron offline) -->
     <style>
-    /* ── Fallback kritis agar form tetap tampil meski CDN gagal ── */
-    *{box-sizing:border-box}
-    .fas,.fa-sign-in-alt,.fa-eye,.fa-eye-slash,.fa-exclamation-circle,.fa-check,.fa-code{font-style:normal}
-    .fas:empty::before{content:''}
-    /* Icon fallback sederhana */
-    .fa-sign-in-alt::before{content:'→'}
-    .fa-eye::before{content:'👁'}
-    .fa-eye-slash::before{content:'🚫'}
-    .fa-exclamation-circle::before{content:'⚠'}
-    .fa-check::before{content:'✓'}
-    .fa-code::before{content:'</>'}
+        /* ── Fallback kritis agar form tetap tampil meski CDN gagal ── */
+        * {
+            box-sizing: border-box
+        }
+
+        .fas,
+        .fa-sign-in-alt,
+        .fa-eye,
+        .fa-eye-slash,
+        .fa-exclamation-circle,
+        .fa-check,
+        .fa-code {
+            font-style: normal
+        }
+
+        .fas:empty::before {
+            content: ''
+        }
+
+        /* Icon fallback sederhana */
+        .fa-sign-in-alt::before {
+            content: '→'
+        }
+
+        .fa-eye::before {
+            content: '👁'
+        }
+
+        .fa-eye-slash::before {
+            content: '🚫'
+        }
+
+        .fa-exclamation-circle::before {
+            content: '⚠'
+        }
+
+        .fa-check::before {
+            content: '✓'
+        }
+
+        .fa-code::before {
+            content: '</>'
+        }
     </style>
     <style>
         :root {
@@ -160,12 +193,12 @@
             flex-shrink: 0;
         }
 
-        .remember-label input[type="checkbox"]:checked + .custom-checkbox {
+        .remember-label input[type="checkbox"]:checked+.custom-checkbox {
             background: var(--primary);
             border-color: var(--primary);
         }
 
-        .remember-label input[type="checkbox"]:checked + .custom-checkbox i {
+        .remember-label input[type="checkbox"]:checked+.custom-checkbox i {
             opacity: 1;
         }
 
@@ -225,9 +258,9 @@
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            background: rgba(255,255,255,0.12);
+            background: rgba(255, 255, 255, 0.12);
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 10px 24px;
             border-radius: 50px;
         }
@@ -283,7 +316,9 @@
         }
 
         @keyframes btn-spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         @media (max-width: 480px) {
@@ -293,6 +328,7 @@
         }
     </style>
 </head>
+
 <body>
 
     <div class="login-container">
@@ -302,7 +338,7 @@
             <div class="logo-section">
                 <div class="logo-icon">
                     <img src="<?= asset_url('images/cat.png') ?>" alt="CAT"
-                         style="width:100%;height:100%;object-fit:contain;border-radius:1rem;">
+                        style="width:100%;height:100%;object-fit:contain;border-radius:1rem;">
                 </div>
                 <h1 class="logo-title">CAT LOCAL</h1>
                 <p class="logo-subtitle">SMA UNGGUL BINA KASIH NUSANTARA</p>
@@ -353,14 +389,14 @@
                             id="togglePasswordBtn">
                             <!-- SVG eye icon — tidak perlu FontAwesome -->
                             <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
                             </svg>
                             <!-- SVG eye-slash — ditampilkan saat password terlihat -->
                             <svg id="eyeSlashIcon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
-                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                                <line x1="1" y1="1" x2="23" y2="23"/>
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                                <line x1="1" y1="1" x2="23" y2="23" />
                             </svg>
                         </button>
                     </div>
@@ -377,7 +413,7 @@
                     </label>
                 </div>
 
-               <button type="submit" class="btn-login" id="btnLogin">
+                <button type="submit" class="btn-login" id="btnLogin">
                     <span class="btn-spinner" aria-hidden="true"></span>
                     <i class="fas fa-sign-in-alt btn-icon"></i>
                     <span class="btn-label">Masuk</span>
@@ -399,21 +435,21 @@
     </div>
 
     <script>
-        const REMEMBER_KEY   = 'cat_remember_session';
-        const SESSION_KEY    = 'cat_temp_session';
-        const DURATION_30D   = 30 * 24 * 60 * 60 * 1000;
-        const DURATION_8H    =  8 * 60 * 60 * 1000;
+        const REMEMBER_KEY = 'cat_remember_session';
+        const SESSION_KEY = 'cat_temp_session';
+        const DURATION_30D = 30 * 24 * 60 * 60 * 1000;
+        const DURATION_8H = 8 * 60 * 60 * 1000;
         const LOGIN_DELAY_MS = 800;
 
-        const form          = document.getElementById('loginForm');
+        const form = document.getElementById('loginForm');
         const usernameInput = document.getElementById('usernameInput');
         const passwordInput = document.getElementById('passwordInput');
         const rememberCheck = document.getElementById('rememberMe');
-        const btnLogin      = document.getElementById('btnLogin');
-        const btnLabel      = btnLogin.querySelector('.btn-label');
-        const toggleBtn     = document.getElementById('togglePasswordBtn');
-        const eyeOn         = document.getElementById('eyeIcon');
-        const eyeOff        = document.getElementById('eyeSlashIcon');
+        const btnLogin = document.getElementById('btnLogin');
+        const btnLabel = btnLogin.querySelector('.btn-label');
+        const toggleBtn = document.getElementById('togglePasswordBtn');
+        const eyeOn = document.getElementById('eyeIcon');
+        const eyeOff = document.getElementById('eyeSlashIcon');
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('<?= app_path_url('sw.js') ?>').catch(() => {});
@@ -422,18 +458,18 @@
         function togglePassword() {
             const isHidden = passwordInput.type === 'password';
 
-            passwordInput.type     = isHidden ? 'text' : 'password';
-            eyeOn.style.display    = isHidden ? 'none'  : 'block';
-            eyeOff.style.display   = isHidden ? 'block' : 'none';
-            toggleBtn.style.color  = isHidden ? '#6366f1' : '#94a3b8';
+            passwordInput.type = isHidden ? 'text' : 'password';
+            eyeOn.style.display = isHidden ? 'none' : 'block';
+            eyeOff.style.display = isHidden ? 'block' : 'none';
+            toggleBtn.style.color = isHidden ? '#6366f1' : '#94a3b8';
         }
 
         function saveSession(username, remember) {
             const payload = JSON.stringify({
                 username,
                 remember,
-                expiry  : Date.now() + (remember ? DURATION_30D : DURATION_8H),
-                savedAt : new Date().toLocaleString('id-ID')
+                expiry: Date.now() + (remember ? DURATION_30D : DURATION_8H),
+                savedAt: new Date().toLocaleString('id-ID')
             });
 
             try {
@@ -466,14 +502,18 @@
             if (!raw) return;
 
             let data;
-            try { data = JSON.parse(raw); } catch { return; }
+            try {
+                data = JSON.parse(raw);
+            } catch {
+                return;
+            }
 
             if (Date.now() > data.expiry) {
                 clearSession();
                 return;
             }
 
-            usernameInput.value  = data.username;
+            usernameInput.value = data.username;
             rememberCheck.checked = !!data.remember;
         }
 
@@ -482,7 +522,7 @@
             btnLabel.textContent = isLoading ? 'Memproses...' : 'Masuk';
         }
 
-        form.addEventListener('submit', function (e) {
+        form.addEventListener('submit', function(e) {
             const username = usernameInput.value.trim();
             if (!username) return;
 
@@ -498,11 +538,12 @@
             setTimeout(() => form.submit(), LOGIN_DELAY_MS);
         });
 
-        window.addEventListener('pageshow', function (e) {
+        window.addEventListener('pageshow', function(e) {
             if (e.persisted) setLoading(false);
         });
 
         loadSession();
     </script>
 </body>
+
 </html>
