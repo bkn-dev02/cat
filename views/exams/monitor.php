@@ -180,6 +180,7 @@
             border-radius: 20px;
             font-size: 13px;
             font-weight: 600;
+            white-space: nowrap;
         }
 
         .status-active-exam {
@@ -205,50 +206,40 @@
     <div class="container main-content">
         <!-- Header -->
         <div class="card-glass">
-            <!-- Header Top -->
-            <div style=" display:flex; justify-content:space-between; align-items:flex-start; gap:1.5rem; flex-wrap:wrap; margin-bottom:1.5rem; padding-bottom:1.25rem; border-bottom:1px solid #e2e8f0; ">
-                <!-- Informasi Ujian -->
+            <div style=" display:flex; justify-content:space-between; align-items:flex-start; gap:1.5rem; flex-wrap:nowrap; margin-bottom:1.5rem; padding-bottom:1.25rem; border-bottom:1px solid #e2e8f0; ">
                 <div style="min-width:280px;">
-                    <!-- Back -->
                     <a href="<?= config('app_url') ?>/exam/monitor" style=" display:inline-flex; align-items:center; gap:0.4rem; color:#6366f1; text-decoration:none; font-size:13px; font-weight:600; margin-bottom:0.6rem; ">
                         <i class="fas fa-arrow-left"></i> <span>Kembali ke Monitor List</span> </a> <!-- Judul -->
                     <h2 style=" display:flex; align-items:center; gap:0.6rem; font-size:1.45rem; font-weight:800; color:#1e293b; margin:0 0 0.4rem; line-height:1.3; "> <i class="fas fa-desktop" style="color:#6366f1;font-size:1.25rem;"></i> <?= htmlspecialchars($exam['title']) ?> </h2>
-                    <!-- Meta Informasi -->
                     <div style=" display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem 0.9rem; color:#64748b; font-size:13px; "> <span> <i class="fas fa-calendar" style="margin-right:0.3rem;"></i> <?= formatWaktuIndonesia($exam['start_time'], 'l, d F Y H:i') ?> WIB </span> <span style="color:#cbd5e1;">|</span> <span> <i class="fas fa-clock" style="margin-right:0.3rem;"></i> Durasi <?= $exam['duration'] ?> menit </span> </div>
-                </div> <!-- Status & Refresh -->
-                <div style=" display:flex; align-items:center; justify-content:flex-end; gap:1rem; flex-wrap:wrap; ">
-                    <!-- Status Ujian -->
-                    <span id="exam-status-badge" class="exam-status-badge <?= htmlspecialchars($examStatusClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($examStatusLabel, ENT_QUOTES, 'UTF-8') ?></span>
-                    <!-- Auto Refresh -->
+                </div>
+                <div style=" display:flex; align-items:center; justify-content:flex-end; gap:1rem; flex-wrap:nowrap; ">
+                    <span id="exam-status-badge" class="exam-status-badge <?= htmlspecialchars($examStatusClass, ENT_QUOTES, 'UTF-8') ?>" style="white-space:nowrap;flex-shrink:0;"><?= htmlspecialchars($examStatusLabel, ENT_QUOTES, 'UTF-8') ?></span>
                     <div class="refresh-indicator" style=" display:flex; align-items:center; gap:0.45rem; color:#64748b; font-size:12px; white-space:nowrap; "> <i class="fas fa-sync-alt" id="refresh-icon"></i> <span>Update otomatis setiap 15 detik</span> </div>
                 </div>
             </div>
             <!-- Statistik Peserta -->
             <div id="stats-grid" class="row g-3">
-                <!-- Total Peserta -->
                 <div class="col-6 col-md">
                     <div class="stat-card"> <span class="stat-number" style="color:#1e293b;"> - </span>
                         <div class="stat-label"> Total Peserta </div>
                     </div>
                 </div>
-                <!-- Sedang Ujian -->
                 <div class="col-6 col-md">
                     <div class="stat-card"> <span class="stat-number" style="color:#10b981;"> - </span>
                         <div class="stat-label"> Sedang Ujian </div>
                     </div>
                 </div>
-                <!-- Belum Ujian -->
                 <div class="col-6 col-md">
                     <div class="stat-card"> <span class="stat-number" style="color:#f59e0b;"> - </span>
                         <div class="stat-label"> Belum Ujian </div>
                     </div>
                 </div>
-                <!-- Sudah Submit -->
                 <div class="col-6 col-md">
                     <div class="stat-card"> <span class="stat-number" style="color:#6366f1;"> - </span>
                         <div class="stat-label"> Sudah Submit </div>
                     </div>
-                </div> <!-- Suspend -->
+                </div>
                 <div class="col-6 col-md">
                     <div class="stat-card"> <span class="stat-number" style="color:#ef4444;"> - </span>
                         <div class="stat-label"> Ter-suspend </div>
@@ -259,9 +250,18 @@
 
         <!-- Daftar Peserta -->
         <div class="card-glass">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:1rem;flex-wrap:wrap;">
                 <h5 style="font-weight:700;color:#1e293b;margin:0"><i class="fas fa-users" style="color:#6366f1"></i> Daftar Peserta</h5>
-                <span class="refresh-indicator"><i class="fas fa-sync-alt pulse"></i> Update otomatis setiap 15 detik</span>
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                    <select id="statusFilter" style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:12px;color:#374151;">
+                        <option value="all">Semua Status</option>
+                        <option value="active">Sedang Ujian</option>
+                        <option value="submitted">Selesai</option>
+                        <option value="suspended">Ter-suspend</option>
+                        <option value="pending">Belum Ujian</option>
+                    </select>
+                    <span class="refresh-indicator"><i class="fas fa-sync-alt pulse"></i> Update otomatis setiap 15 detik</span>
+                </div>
             </div>
             <div id="students-container">
                 <div style="text-align:center;padding:3rem;color:#64748b">
@@ -278,6 +278,14 @@
         let lastSubmittedCount = 0;
         let lastActiveCount = 0;
         let monitorSessions = new Map();
+        let currentStatusFilter = 'all';
+
+        function normalizeStatus(s) {
+            if (s.status === 'active' || s.status === 'in_progress') return 'active';
+            if (s.status === 'submitted' || s.status === 'completed' || s.status === 'graded') return 'submitted';
+            if (s.status === 'suspended') return 'suspended';
+            return 'pending';
+        }
 
         function actionButtonsHtml(s, mobile) {
             const isRunning = s.status === 'active' || s.status === 'in_progress';
@@ -287,8 +295,8 @@
                 return mobile ? '' : '<span style="color:#94a3b8;font-size:11px">-</span>';
             }
 
-            const size = mobile ? 'padding:8px 16px;font-size:12px;border-radius:6px' :
-                'padding:4px 8px;font-size:11px;border-radius:4px';
+            const size = mobile ? 'padding:8px 16px;font-size:12px;border-radius:6px;width:100px;text-align:center' :
+                'padding:4px 8px;font-size:11px;border-radius:4px;width:80px;text-align:center';
             const base = `border:0;font-weight:600;${size}`;
 
             const stateBtn = isSuspended ?
@@ -298,64 +306,14 @@
             const addBtn = `<button type="button" onclick="promptAddDuration(${Number(s.id)})" style="${base};background:#6366f1;color:white;cursor:pointer">+ Waktu</button>`;
 
             const wrapStyle = mobile ?
-                'display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px' :
-                'display:flex;gap:6px;flex-wrap:wrap';
+                'display:flex;gap:6px;flex-wrap:nowrap;justify-content:center;margin-top:8px' :
+                'display:flex;gap:6px;flex-wrap:nowrap';
 
             return `<div style="${wrapStyle}">${stateBtn}${addBtn}</div>`;
         }
 
         async function resumeSession(sessionId, btn) {
-            const s = monitorSessions.get(String(sessionId));
-            if (!s) {
-                alert('Data siswa tidak ditemukan. Muat ulang halaman.');
-                return;
-            }
-            const name = s.full_name || s.username || 'siswa ini';
-
-            if (!confirm(
-                    'Lanjutkan ujian untuk ' + name + '?\n\n' +
-                    'Status akan diubah menjadi aktif dan jawaban/histori pelanggaran tetap tersimpan.\n' +
-                    'Waktu hanya akan berjalan setelah siswa mulai ujian kembali.\n\n' +
-                    'Lanjutkan?'
-                )) return;
-
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = 'Memproses...';
-            }
-
-            try {
-                // Request yang sama dengan form "Lanjutkan Ujian" di halaman Suspend Akun
-                await fetch(`${baseUrl}/admin/suspendAkun?user_id=${encodeURIComponent(s.user_id)}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: 'reset_session_id=' + encodeURIComponent(sessionId),
-                    credentials: 'same-origin'
-                });
-
-                // Hasil dinilai dari status terbaru di database
-                const r = await fetch(`${baseUrl}/exam/monitorData/${examId}`, {
-                    credentials: 'same-origin'
-                });
-                const result = await r.json();
-                if (!result.success) throw new Error(result.message || 'Gagal memuat data');
-
-                updateStats(result.summary);
-                updateStudentsList(result.data);
-
-                const after = result.data.find(x => String(x.id) === String(sessionId));
-                if (after && after.status !== 'suspended') {
-                    showToast('Ujian ' + name + ' dilanjutkan', 'success');
-                } else {
-                    alert('Sesi belum berhasil dilanjutkan. Coba lewat halaman Suspend Akun untuk melihat alasannya.');
-                }
-            } catch (err) {
-                console.error('Resume error:', err);
-                alert('Gagal terhubung ke server.');
-                fetchData();
-            }
+            openResumeModal(sessionId, btn);
         }
 
         function formatTime(seconds) {
@@ -406,12 +364,27 @@
                 return;
             }
 
+            // Filter berdasarkan status yang dipilih
+            const filtered = currentStatusFilter === 'all' ?
+                sessions :
+                sessions.filter(s => normalizeStatus(s) === currentStatusFilter);
+
+            if (filtered.length === 0) {
+                document.getElementById('students-container').innerHTML = `
+                    <div style="text-align:center;padding:3rem;color:#64748b">
+                        <i class="fas fa-search" style="font-size:3rem;margin-bottom:1rem;opacity:0.4"></i>
+                        <h5>Tidak Ada Peserta</h5>
+                        <p>Tidak ada peserta dengan status tersebut.</p>
+                    </div>`;
+                return;
+            }
+
             const isMobile = window.innerWidth < 768;
 
             if (isMobile) {
                 // Mobile: card layout
                 let cards = '';
-                sessions.forEach(s => {
+                filtered.forEach(s => {
                     const pct = s.total_questions > 0 ? Math.round(s.answered_count / s.total_questions * 100) : 0;
                     let statusColor = s.status === 'active' || s.status === 'in_progress' ? '#10b981' :
                         s.status === 'submitted' || s.status === 'completed' ? '#6366f1' :
@@ -443,7 +416,7 @@
                             <span style="background:${statusColor}20;color:${statusColor};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${statusText}</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                            <div class="progress-wrap" style="flex:1"><div class="progress-fill" style="width:${pct}%"></div></div>
+                            <div class="progress-wrap" style="width:100px"><div class="progress-fill" style="width:${pct}%"></div></div>
                             <span style="font-size:12px;font-weight:600;color:#374151;white-space:nowrap">${s.answered_count}/${s.total_questions} (${pct}%)</span>
                         </div>
                         <div style="font-size:11px;color:#64748b;display:flex;gap:12px">
@@ -456,9 +429,9 @@
                 });
                 document.getElementById('students-container').innerHTML = cards;
             } else {
-                // Desktop: table layout
+                // Desktop: div-based layout (teks bisa melebar, tidak kena batasan kolom tabel)
                 let rows = '';
-                sessions.forEach(s => {
+                filtered.forEach(s => {
                     const pct = s.total_questions > 0 ? Math.round(s.answered_count / s.total_questions * 100) : 0;
                     let badge = '';
                     if (s.status === 'active' || s.status === 'in_progress') badge = `<span class="badge-active"><i class="fas fa-circle" style="font-size:8px"></i> Sedang Ujian</span>`;
@@ -484,45 +457,39 @@
                         violationInfo += `<br><span style="color:#dc2626;font-size:11px"><i class="fas fa-ban"></i> ${reason}</span>`;
                     }
 
-                    rows += `<tr>
-                        <td>
-                            <div style="display:flex;align-items:center">
-                                <div class="avatar">${getInitials(s.full_name)}</div>
-                                <div>
-                                    <div style="font-weight:600;color:#1e293b;font-size:14px">${s.full_name || '-'}</div>
-                                    <div style="font-size:12px;color:#64748b">${s.username || ''} ${s.kelas ? '· ' + s.kelas : ''}</div>
-                                </div>
+                    rows += `<div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid #f1f5f9;flex-wrap:nowrap;">
+                        <div style="flex:0 0 auto;width:280px;display:flex;align-items:center;">
+                            <div>
+                                <div style="font-weight:600;color:#1e293b;font-size:14px;white-space:nowrap;">${s.full_name || '-'}</div>
+                                <div style="font-size:12px;color:#64748b;white-space:nowrap;">${s.username || ''}</div>
+                                <div style="font-size:12px;color:#64748b;white-space:nowrap;">${s.kelas || '-'}</div>
                             </div>
-                        </td>
-                        <td>${badge}</td>
-                        <td>
-                            <div style="display:flex;align-items:center;gap:8px">
-                                <div class="progress-wrap"><div class="progress-fill" style="width:${pct}%"></div></div>
-                                <span style="font-size:13px;font-weight:600;color:#374151">${s.answered_count}/${s.total_questions}</span>
-                                <span style="font-size:12px;color:#64748b">(${pct}%)</span>
-                            </div>
-                        </td>
-                        <td style="font-size:13px;color:#374151">${(s.status === 'active' || s.status === 'in_progress') ? formatTime(s.remaining_seconds) : '-'}</td>
-                        <td style="font-size:13px;color:#374151">${submitTime}</td>
-                        <td>${violationInfo || '<span style="color:#94a3b8;font-size:12px">-</span>'}</td>
-                        <td>${actionButtonsHtml(s, false)}</td>
-                    </tr>`;
+                        </div>
+                        <div style="flex:0 0 auto;width:110px;white-space:nowrap;">${badge}</div>
+                        <div style="flex:0 0 auto;width:180px;display:flex;align-items:center;gap:8px;">
+                            <div class="progress-wrap" style="width:100px"><div class="progress-fill" style="width:${pct}%"></div></div>
+                            <span style="font-size:13px;font-weight:600;color:#374151;white-space:nowrap">${s.answered_count}/${s.total_questions}</span>
+                            <span style="font-size:12px;color:#64748b;white-space:nowrap">(${pct}%)</span>
+                        </div>
+                        <div style="flex:0 0 auto;width:110px;font-size:13px;color:#374151;white-space:nowrap">${(s.status === 'active' || s.status === 'in_progress') ? formatTime(s.remaining_seconds) : '-'}</div>
+                        <div style="flex:0 0 auto;width:100px;font-size:13px;color:#374151;white-space:nowrap">${submitTime}</div>
+                        <div style="flex:0 0 auto;width:140px;">${violationInfo || '<span style="color:#94a3b8;font-size:12px">-</span>'}</div>
+                        <div style="flex:0 0 auto;width:170px;">${actionButtonsHtml(s, false)}</div>
+                    </div>`;
                 });
 
                 document.getElementById('students-container').innerHTML = `
-                    <div class="table-responsive" id="table-scroll-wrap" style="overflow-x:auto">
-                        <table class="table table-hover" style="min-width:700px">
-                            <thead><tr>
-                                <th style="min-width:200px">Siswa</th>
-                                <th style="min-width:110px">Status</th>
-                                <th style="min-width:180px">Progress</th>
-                                <th style="min-width:110px">Waktu Tersisa</th>
-                                <th style="min-width:100px">Waktu Submit</th>
-                                <th style="min-width:140px">Pelanggaran</th>
-                                <th style="min-width:170px">Aksi</th>
-                            </tr></thead>
-                            <tbody>${rows}</tbody>
-                        </table>
+                    <div id="table-scroll-wrap" style="overflow-x:auto">
+                        <div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:2px solid #e2e8f0;background:#f8fafc;flex-wrap:nowrap;">
+                            <div style="flex:0 0 auto;width:280px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Siswa</div>
+                            <div style="flex:0 0 auto;width:110px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Status</div>
+                            <div style="flex:0 0 auto;width:180px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Progress</div>
+                            <div style="flex:0 0 auto;width:110px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Waktu Tersisa</div>
+                            <div style="flex:0 0 auto;width:100px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Waktu Submit</div>
+                            <div style="flex:0 0 auto;width:140px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Pelanggaran</div>
+                            <div style="flex:0 0 auto;width:170px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Aksi</div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;">${rows}</div>
                     </div>`;
             }
 
@@ -536,6 +503,13 @@
 
             document.querySelectorAll('.resume-btn').forEach(button => {
                 button.addEventListener('click', () => resumeSession(button.dataset.sessionId, button));
+            });
+
+            document.getElementById('statusFilter').addEventListener('change', (e) => {
+                currentStatusFilter = e.target.value;
+                // Re-render dengan filter baru menggunakan data yang sudah disimpan
+                const all = Array.from(monitorSessions.values());
+                updateStudentsList(all);
             });
         }
 
@@ -579,8 +553,9 @@
         }
 
         function showToast(msg, type) {
+            const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#6366f1';
             const t = document.createElement('div');
-            t.style.cssText = `position:fixed;top:20px;right:20px;background:${type==='success'?'#10b981':'#6366f1'};color:white;padding:12px 20px;border-radius:8px;z-index:9999;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.2)`;
+            t.style.cssText = `position:fixed;top:20px;right:20px;background:${bg};color:white;padding:12px 20px;border-radius:8px;z-index:9999;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.2)`;
             t.textContent = msg;
             document.body.appendChild(t);
             setTimeout(() => t.remove(), 4000);
@@ -601,15 +576,33 @@
         document.addEventListener('visibilitychange', updateRefreshSchedule);
         updateRefreshSchedule();
 
-        function promptAddDuration(sessionId) {
-            const minutes = prompt('Masukkan tambahan durasi (menit):');
-            if (minutes === null) return;
+        let pendingSessionId = null;
+
+        function openAddDurationModal(sessionId) {
+            pendingSessionId = sessionId;
+            const s = monitorSessions.get(String(sessionId));
+            if (s) document.getElementById('addDuration-student').textContent = 'Siswa: ' + (s.full_name || s.username || '-');
+            const input = document.getElementById('addDuration-minutes');
+            input.value = '';
+            input.focus();
+            document.getElementById('addDuration-modal').style.display = 'flex';
+        }
+
+        function closeAddDurationModal() {
+            document.getElementById('addDuration-modal').style.display = 'none';
+            pendingSessionId = null;
+        }
+
+        function submitAddDuration() {
+            const input = document.getElementById('addDuration-minutes');
+            const minutes = input.value;
             const m = parseInt(minutes, 10);
             if (!m || m <= 0) {
-                alert('Masukkan angka menit yang valid.');
+                showToast('Masukkan angka menit yang valid.', 'error');
                 return;
             }
-            fetch(`${baseUrl}/exam/addDuration/${sessionId}`, {
+            closeAddDurationModal();
+            fetch(`${baseUrl}/exam/addDuration/${pendingSessionId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -619,15 +612,93 @@
                 .then(r => r.json())
                 .then(result => {
                     if (result.success) {
-                        alert(result.message);
+                        showToast(result.message, 'success');
                         fetchData();
                     } else {
-                        alert('Gagal: ' + (result.message || 'Terjadi kesalahan'));
+                        showToast('Gagal: ' + (result.message || 'Terjadi kesalahan'), 'error');
                     }
                 })
                 .catch(() => {
-                    alert('Gagal terhubung ke server.');
+                    showToast('Gagal terhubung ke server.', 'error');
                 });
+        }
+
+        function promptAddDuration(sessionId) {
+            openAddDurationModal(sessionId);
+        }
+
+        let pendingResumeSession = null;
+        let pendingResumeBtn = null;
+
+        function openResumeModal(sessionId, btn) {
+            const s = monitorSessions.get(String(sessionId));
+            if (!s) {
+                showToast('Data siswa tidak ditemukan. Muat ulang halaman.', 'error');
+                return;
+            }
+            document.getElementById('resume-student-name').textContent = s.full_name || s.username || 'siswa ini';
+            pendingResumeSession = sessionId;
+            pendingResumeBtn = btn;
+            document.getElementById('resume-modal').style.display = 'flex';
+        }
+
+        function closeResumeModal() {
+            document.getElementById('resume-modal').style.display = 'none';
+            pendingResumeSession = null;
+            pendingResumeBtn = null;
+        }
+
+        async function confirmResumeSession() {
+            const sessionId = pendingResumeSession;
+            const btn = pendingResumeBtn;
+            closeResumeModal();
+
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Memproses...';
+            }
+
+            try {
+                const s = monitorSessions.get(String(sessionId));
+                // Request yang sama dengan form "Lanjutkan Ujian" di halaman Suspend Akun
+                await fetch(`${baseUrl}/admin/suspendAkun?user_id=${encodeURIComponent(s.user_id)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'reset_session_id=' + encodeURIComponent(sessionId),
+                    credentials: 'same-origin'
+                });
+
+                // Hasil dinilai dari status terbaru di database
+                const r = await fetch(`${baseUrl}/exam/monitorData/${examId}`, {
+                    credentials: 'same-origin'
+                });
+                const result = await r.json();
+                if (!result.success) throw new Error(result.message || 'Gagal memuat data');
+
+                updateStats(result.summary);
+                updateStudentsList(result.data);
+
+                const after = result.data.find(x => String(x.id) === String(sessionId));
+                if (after && after.status !== 'suspended') {
+                    showToast('Ujian ' + (s.full_name || s.username || 'siswa ini') + ' dilanjutkan', 'success');
+                } else {
+                    showToast('Sesi belum berhasil dilanjutkan. Coba lewat halaman Suspend Akun.', 'error');
+                }
+            } catch (err) {
+                console.error('Resume error:', err);
+                showToast('Gagal terhubung ke server.', 'error');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Lanjutkan';
+                }
+                fetchData();
+            }
+        }
+
+        async function resumeSession(sessionId, btn) {
+            openResumeModal(sessionId, btn);
         }
     </script>
 
@@ -695,6 +766,42 @@
             if (e.target === this) this.style.display = 'none';
         });
     </script>
+
+    <!-- Modal Tambah Durasi -->
+    <div id="addDuration-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:12px;padding:24px;max-width:400px;width:90%;max-height:80vh;overflow-y:auto">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h5 style="margin:0;font-weight:700;color:#1e293b"><i class="fas fa-clock" style="color:#6366f1"></i> Tambah Durasi Ujian</h5>
+                <button onclick="closeAddDurationModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#64748b">&times;</button>
+            </div>
+            <p id="addDuration-student" style="color:#64748b;font-size:13px;margin-bottom:16px"></p>
+            <div style="margin-bottom:16px">
+                <label style="display:block;font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">Tambahan durasi (menit)</label>
+                <input type="number" id="addDuration-minutes" placeholder="0" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px" min="1">
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button type="button" onclick="closeAddDurationModal()" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#64748b;font-size:13px;cursor:pointer">Batal</button>
+                <button type="button" onclick="submitAddDuration()" style="padding:8px 16px;border:0;border-radius:6px;background:#6366f1;color:white;font-size:13px;cursor:pointer">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Konfirmasi Lanjutkan Ujian -->
+    <div id="resume-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:12px;padding:24px;max-width:400px;width:90%;max-height:80vh;overflow-y:auto">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h5 style="margin:0;font-weight:700;color:#1e293b"><i class="fas fa-play" style="color:#10b981"></i> Lanjutkan Ujian</h5>
+                <button onclick="closeResumeModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#64748b">&times;</button>
+            </div>
+            <p id="resume-student-name" style="color:#64748b;font-size:13px;margin-bottom:16px"></p>
+            <p style="color:#64748b;font-size:13px;margin-bottom:20px">Status akan diubah menjadi aktif dan jawaban/histori pelanggaran tetap tersimpan. Waktu hanya akan berjalan setelah siswa mulai ujian kembali.</p>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button type="button" onclick="closeResumeModal()" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#64748b;font-size:13px;cursor:pointer">Batal</button>
+                <button type="button" onclick="confirmResumeSession()" style="padding:8px 16px;border:0;border-radius:6px;background:#10b981;color:white;font-size:13px;cursor:pointer">Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 
 </html>
