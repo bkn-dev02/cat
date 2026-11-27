@@ -155,27 +155,27 @@ function requireAuth() {
 
     // ── Validasi single-session untuk siswa ──────────────────────────────
     // Jika ada session_id lain yang login dengan akun yang sama, paksa logout
-    if (isset($user['role']) && in_array($user['role'], ['student', 'siswa'])) {
-        $currentPhpSession = session_id();
+    // if (isset($user['role']) && in_array($user['role'], ['student', 'siswa'])) {
+    //     $currentPhpSession = session_id();
 
-        // Ambil active_session_id terbaru dari DB (bukan dari cache $_SESSION)
-        try {
-            $stmt = db()->prepare("SELECT active_session_id FROM users WHERE id = ?");
-            $stmt->execute([$user['id']]);
-            $row = $stmt->fetch();
-            $dbSessionId = $row['active_session_id'] ?? null;
+    //     // Ambil active_session_id terbaru dari DB (bukan dari cache $_SESSION)
+    //     try {
+    //         $stmt = db()->prepare("SELECT active_session_id FROM users WHERE id = ?");
+    //         $stmt->execute([$user['id']]);
+    //         $row = $stmt->fetch();
+    //         $dbSessionId = $row['active_session_id'] ?? null;
 
-            if ($dbSessionId && $dbSessionId !== $currentPhpSession) {
-                // Sesi ini tidak valid lagi — ada login baru dari perangkat lain
-                session_destroy();
-                header('Location: ' . config('app_url') . '/auth/login?reason=concurrent');
-                exit;
-            }
-        } catch (Exception $e) {
-            // Jika gagal query, biarkan lanjut (graceful degradation)
-            error_log("requireAuth single-session check error: " . $e->getMessage());
-        }
-    }
+    //         if ($dbSessionId && $dbSessionId !== $currentPhpSession) {
+    //             // Sesi ini tidak valid lagi — ada login baru dari perangkat lain
+    //             session_destroy();
+    //             header('Location: ' . config('app_url') . '/auth/login?reason=concurrent');
+    //             exit;
+    //         }
+    //     } catch (Exception $e) {
+    //         // Jika gagal query, biarkan lanjut (graceful degradation)
+    //         error_log("requireAuth single-session check error: " . $e->getMessage());
+    //     }
+    // }
     // ── Akhir validasi single-session ────────────────────────────────────
 }
 

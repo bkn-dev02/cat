@@ -22,5 +22,5 @@ return [
 
     // App
     'app_name' => 'CAT Enterprise',
-    'app_url' => project_env_value('APP_URL', 'http://localhost/cat'),
+    'app_url' => project_env_value('APP_URL', 'http://10.18.31.88/cat'),
 ];

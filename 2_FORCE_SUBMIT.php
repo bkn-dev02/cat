@@ -12,7 +12,7 @@ error_reporting(E_ALL);
 
 // ── Koneksi DB ───────────────────────────────────────────────────────────────
 try {
-    $config = require __DIR__ . '/config.production.php';
+    $config = require __DIR__ . '/config.php';
     $pdo = new PDO(
         'mysql:host=' . $config['db_host'] . ';dbname=' . $config['db_name'] . ';charset=utf8mb4',
         $config['db_user'],
