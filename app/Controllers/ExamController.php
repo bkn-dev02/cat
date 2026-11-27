@@ -1558,190 +1558,108 @@ class ExamController
         requireAuth();
         requireRole(['admin', 'guru']);
 
+        $examId = (int)$examId;
+        $user   = auth();
+        $isGuru = ($user['role'] === 'guru');
+        $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
+        $stmt->execute([$examId]);
+        $exam = $stmt->fetch();
+
+        if (!$exam) {
+            $_SESSION['error'] = 'Ujian tidak ditemukan';
+            redirect('exam');
+            return;
+        }
+
+        $examType = $exam['exam_type'] ?? 'single';
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            // Get exam info first to check exam type
-            $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
-            $stmt->execute([$examId]);
-            $exam = $stmt->fetch();
-
-            if (!$exam) {
-                $_SESSION['error'] = 'Ujian tidak ditemukan';
-                redirect('exam');
-                return;
-            }
-
-            $selectedQuestions = [];
-
-            // Handle multi-subject exam
-            if ($exam['exam_type'] === 'multi') {
-                // Collect questions from all subjects
-                foreach ($_POST as $key => $value) {
-                    if (strpos($key, 'questions_') === 0 && is_array($value)) {
-                        $selectedQuestions = array_merge($selectedQuestions, $value);
-                    }
-                }
-            } else {
-                // Handle single subject exam
-                $selectedQuestions = $_POST['questions'] ?? [];
-            }
+            $selectedQuestions = $this->collectSelectedQuestionIds($examType);
 
             if (empty($selectedQuestions)) {
                 $_SESSION['error'] = 'Pilih minimal satu soal';
             } else {
                 try {
-                    // Clear existing questions
-                    $stmt = db()->prepare("DELETE FROM exam_questions WHERE exam_id = ?");
-                    $stmt->execute([$examId]);
-
-                    // Add selected questions
-                    $stmt = db()->prepare("INSERT INTO exam_questions (exam_id, question_id, order_num) VALUES (?, ?, ?)");
-                    foreach ($selectedQuestions as $index => $questionId) {
-                        $stmt->execute([$examId, $questionId, $index + 1]);
-                    }
+                    $this->replaceExamQuestions($examId, $selectedQuestions);
 
                     $_SESSION['success'] = 'Soal berhasil ditambahkan ke ujian';
                     redirect('exam');
                     return;
-                } catch (Exception $e) {
-                    $_SESSION['error'] = 'Gagal menambahkan soal: ' . $e->getMessage();
+                } catch (\Throwable $e) {
+                    error_log('[assignQuestions] exam_id=' . $examId . ' ' . $e->getMessage());
+                    $_SESSION['error'] = 'Gagal menambahkan soal. Silakan coba lagi.';
                 }
             }
         }
 
-        // Get exam info (already retrieved in POST section if it was POST request)
-        if (!isset($exam)) {
-            $stmt = db()->prepare("SELECT * FROM exams WHERE id = ?");
-            $stmt->execute([$examId]);
-            $exam = $stmt->fetch();
-
-            if (!$exam) {
-                $_SESSION['error'] = 'Ujian tidak ditemukan';
-                redirect('exam');
-                return;
-            }
-        }
-
-        // Check if exam already has questions
         $stmt = db()->prepare("SELECT COUNT(*) FROM exam_questions WHERE exam_id = ?");
         $stmt->execute([$examId]);
-        $hasQuestions = $stmt->fetchColumn() > 0 || !empty($exam['exam_pdf']);
+        $hasQuestions = ((int)$stmt->fetchColumn() > 0) || !empty($exam['exam_pdf']);
 
-        // Get current user
-        $user = auth();
-
-        // If exam has no questions yet, show empty state with options
         if (!$hasQuestions) {
-            // For new exams, show the assign interface with empty state
             $_SESSION['info'] = 'Ujian baru perlu ditambahkan soal terlebih dahulu sebelum bisa digunakan.';
-
-            // Get all available questions for empty state
-            // Guru hanya melihat soal miliknya sendiri; admin melihat semua soal
-            $onlyMine = ($user['role'] === 'guru');
-            $whereMine = $onlyMine ? "WHERE q.created_by = ?" : "";
-            $stmt = db()->prepare("
-                SELECT q.*, s.name as subject_name,
-                       CASE WHEN q.created_by = ? THEN 1 ELSE 0 END as is_mine,
-                       u.username as creator_name
-                FROM questions q
-                LEFT JOIN subjects s ON q.subject_id = s.id
-                LEFT JOIN users u ON q.created_by = u.id
-                {$whereMine}
-                ORDER BY 
-                    CASE WHEN q.created_by = ? THEN 0 ELSE 1 END,
-                    s.name, 
-                    q.created_at DESC
-            ");
-            $paramsQ = [$user['id']];
-            if ($onlyMine) $paramsQ[] = $user['id'];
-            $paramsQ[] = $user['id'];
-            $stmt->execute($paramsQ);
-            $questions = $stmt->fetchAll();
-
-            // Get exam subjects for multi-subject exams
-            $examSubjects = [];
-            $questionsBySubject = [];
-
-            if ($exam['exam_type'] === 'multi') {
-                $stmt = db()->prepare("
-                    SELECT es.*, s.name as subject_name 
-                    FROM exam_subjects es 
-                    JOIN subjects s ON es.subject_id = s.id 
-                    WHERE es.exam_id = ? ORDER BY es.order_num
-                ");
-                $stmt->execute([$examId]);
-                $examSubjects = $stmt->fetchAll();
-
-                // Group questions by subject
-                foreach ($questions as $q) {
-                    if ($q['subject_id']) {
-                        $questionsBySubject[$q['subject_id']][] = $q;
-                    }
-                }
-            }
-
-            view('exams/assign', [
-                'exam' => $exam,
-                'hasQuestions' => false,
-                'allQuestions' => $questions,
-                'questions' => $questions,
-                'examSubjects' => $examSubjects,
-                'questionsBySubject' => $questionsBySubject
-            ]);
-            return;
         }
 
-        // If exam already has questions, show full interface
-        // Guru hanya melihat soal miliknya sendiri; admin melihat semua soal
-        $onlyMine = ($user['role'] === 'guru');
-        $whereMine = $onlyMine ? "WHERE q.created_by = ?" : "";
+        $ownerWhere  = $isGuru ? "WHERE q.created_by = ?" : "";
+        $ownerParams = $isGuru ? [$user['id']] : [];
+
+        if ($isGuru) {
+            $stmt = db()->prepare("
+                SELECT DISTINCT q.subject_id, s.name AS subject_name
+                FROM questions q
+                LEFT JOIN subjects s ON q.subject_id = s.id
+                WHERE q.created_by = ?
+                ORDER BY s.name
+            ");
+            $stmt->execute([$user['id']]);
+        } else {
+            $stmt = db()->prepare("
+                SELECT id AS subject_id, name AS subject_name
+                FROM subjects
+                ORDER BY name
+            ");
+            $stmt->execute();
+        }
+        $availableSubjects = $stmt->fetchAll();
+
+        // Tanpa LIMIT/OFFSET: semua soal tampil, soal milik akun ini di urutan teratas
         $stmt = db()->prepare("
-            SELECT q.*, s.name as subject_name,
-                   CASE WHEN eq.question_id IS NOT NULL THEN 1 ELSE 0 END as is_selected,
-                   CASE WHEN q.created_by = ? THEN 1 ELSE 0 END as is_mine,
-                   u.username as creator_name
+            SELECT q.*, s.name AS subject_name,
+                CASE WHEN eq.question_id IS NOT NULL THEN 1 ELSE 0 END AS is_selected,
+                CASE WHEN q.created_by = ? THEN 1 ELSE 0 END AS is_mine,
+                u.username AS creator_name
             FROM questions q
             LEFT JOIN subjects s ON q.subject_id = s.id
             LEFT JOIN exam_questions eq ON q.id = eq.question_id AND eq.exam_id = ?
             LEFT JOIN users u ON q.created_by = u.id
-            {$whereMine}
-            ORDER BY 
+            {$ownerWhere}
+            ORDER BY
                 CASE WHEN q.created_by = ? THEN 0 ELSE 1 END,
-                s.name, 
-                q.created_at DESC
+                s.name,
+                q.created_at DESC,
+                q.id DESC
         ");
-        $paramsQ = [$user['id'], $examId];
-        if ($onlyMine) $paramsQ[] = $user['id'];
-        $paramsQ[] = $user['id'];
-        $stmt->execute($paramsQ);
+        $stmt->execute(array_merge([$user['id'], $examId], $ownerParams, [$user['id']]));
         $questions = $stmt->fetchAll();
 
-        // Separate user's questions from others
-        $myQuestions = [];
-        $otherQuestions = [];
+        $totalQuestions = count($questions);
+        $page = 1;
+        $totalPages = 1;
 
-        foreach ($questions as $q) {
-            if ($q['is_mine']) {
-                $myQuestions[] = $q;
-            } else {
-                $otherQuestions[] = $q;
-            }
-        }
-
-        // Get exam subjects for multi-subject exams
-        $examSubjects = [];
+        $examSubjects       = [];
         $questionsBySubject = [];
 
-        if ($exam['exam_type'] === 'multi') {
+        if ($examType === 'multi') {
             $stmt = db()->prepare("
-                SELECT es.*, s.name as subject_name 
-                FROM exam_subjects es 
-                JOIN subjects s ON es.subject_id = s.id 
-                WHERE es.exam_id = ? ORDER BY es.order_num
+                SELECT es.*, s.name AS subject_name
+                FROM exam_subjects es
+                JOIN subjects s ON es.subject_id = s.id
+                WHERE es.exam_id = ?
+                ORDER BY es.order_num
             ");
             $stmt->execute([$examId]);
             $examSubjects = $stmt->fetchAll();
 
-            // Group questions by subject
             foreach ($questions as $q) {
                 if ($q['subject_id']) {
                     $questionsBySubject[$q['subject_id']][] = $q;
@@ -1749,18 +1667,85 @@ class ExamController
             }
         }
 
-        view('exams/assign', [
-            'exam' => $exam,
-            'hasQuestions' => true,
-            'myQuestions' => $myQuestions,
-            'otherQuestions' => $otherQuestions,
-            'allQuestions' => $questions,
-            'questions' => $questions, // Add this for backward compatibility
-            'examSubjects' => $examSubjects,
-            'questionsBySubject' => $questionsBySubject
-        ]);
+        $viewData = [
+            'exam'               => $exam,
+            'hasQuestions'       => $hasQuestions,
+            'allQuestions'       => $questions,
+            'questions'          => $questions,
+            'examSubjects'       => $examSubjects,
+            'questionsBySubject' => $questionsBySubject,
+            'availableSubjects'  => $availableSubjects,
+            'currentPage'    => 1,
+            'totalPages'     => 1,
+            'totalQuestions' => $totalQuestions,
+            'isGuru'             => $isGuru,
+        ];
+
+        if ($hasQuestions) {
+            $myQuestions    = [];
+            $otherQuestions = [];
+            foreach ($questions as $q) {
+                if ($q['is_mine']) {
+                    $myQuestions[] = $q;
+                } else {
+                    $otherQuestions[] = $q;
+                }
+            }
+            $viewData['myQuestions']    = $myQuestions;
+            $viewData['otherQuestions'] = $otherQuestions;
+        }
+
+        view('exams/assign', $viewData);
     }
 
+    private function collectSelectedQuestionIds(string $examType): array
+    {
+        $raw = [];
+
+        if ($examType === 'multi') {
+            foreach ($_POST as $key => $value) {
+                if (strpos($key, 'questions_') === 0 && is_array($value)) {
+                    $raw = array_merge($raw, $value);
+                }
+            }
+        } elseif (is_array($_POST['questions'] ?? null)) {
+            $raw = $_POST['questions'];
+        }
+
+        $ids = [];
+        foreach ($raw as $value) {
+            $id = filter_var($value, FILTER_VALIDATE_INT);
+            if ($id !== false && $id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    private function replaceExamQuestions(int $examId, array $questionIds): void
+    {
+        $pdo = db();
+        $pdo->beginTransaction();
+
+        try {
+            $pdo->prepare("DELETE FROM exam_questions WHERE exam_id = ?")->execute([$examId]);
+
+            $insert = $pdo->prepare(
+                "INSERT INTO exam_questions (exam_id, question_id, order_num) VALUES (?, ?, ?)"
+            );
+            foreach ($questionIds as $index => $questionId) {
+                $insert->execute([$examId, $questionId, $index + 1]);
+            }
+
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
 
     public function getAvailableQuestions($examId)
     {

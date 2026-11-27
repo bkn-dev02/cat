@@ -29,20 +29,20 @@ class AuthController
 
             if ($user && password_verify($password, $user['password'])) {
                 // Siswa WAJIB menggunakan ExamBro
-                // if (in_array($user['role'], ['student', 'siswa']) && !$this->isExamBrowser()) {
-                //     requireExamBro();
-                // }
+                if (in_array($user['role'], ['student', 'siswa']) && !$this->isExamBrowser()) {
+                    requireExamBro();
+                }
 
                 // ── Blokir login ganda untuk siswa ───────────────────────
-                if (in_array($user['role'], ['student', 'siswa'])) {
-                    $activeSessionId = $user['active_session_id'] ?? null;
+                // if (in_array($user['role'], ['student', 'siswa'])) {
+                //     $activeSessionId = $user['active_session_id'] ?? null;
 
-                    if ($activeSessionId && $activeSessionId !== session_id()) {
-                        $error = 'Akun ini masih aktif di perangkat lain. Tutup aplikasi di perangkat lain terlebih dahulu, kemudian coba login kembali.';
-                        view('login', ['error' => $error]);
-                        return;
-                    }
-                }
+                //     if ($activeSessionId && $activeSessionId !== session_id()) {
+                //         $error = 'Akun ini masih aktif di perangkat lain. Tutup aplikasi di perangkat lain terlebih dahulu, kemudian coba login kembali.';
+                //         view('login', ['error' => $error]);
+                //         return;
+                //     }
+                // }
                 // ── Akhir blokir login ganda ─────────────────────────────
 
                 // Simpan session_id aktif ke DB (hanya jika kolom sudah ada)

@@ -46,7 +46,7 @@
         }
 
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #2e4cd3 0%, #0a2bcc 0%, #050136 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -76,7 +76,7 @@
         .logo-icon {
             width: 64px;
             height: 64px;
-            background: var(--primary);
+            /* background: var(--primary); */
             border-radius: 1rem;
             display: inline-flex;
             align-items: center;
@@ -247,6 +247,45 @@
             color: white;
         }
 
+        /* ── Spinner Loading ── */
+        .btn-login {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+        }
+
+        .btn-spinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid rgba(255, 255, 255, 0.35);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: btn-spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        .btn-login.loading {
+            pointer-events: none;
+            cursor: wait;
+            opacity: 0.85;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-login.loading .btn-spinner {
+            display: inline-block;
+        }
+
+        .btn-login.loading .btn-icon {
+            display: none;
+        }
+
+        @keyframes btn-spin {
+            to { transform: rotate(360deg); }
+        }
+
         @media (max-width: 480px) {
             .login-card {
                 padding: 2rem 1.5rem;
@@ -262,11 +301,11 @@
             <!-- Logo -->
             <div class="logo-section">
                 <div class="logo-icon">
-                    <img src="<?= asset_url('cat.png') ?>" alt="CAT Enterprise"
+                    <img src="<?= asset_url('images/cat.png') ?>" alt="CAT"
                          style="width:100%;height:100%;object-fit:contain;border-radius:1rem;">
                 </div>
-                <h1 class="logo-title">CAT Enterprise</h1>
-                <p class="logo-subtitle">Computer Adaptive Test System</p>
+                <h1 class="logo-title">CAT LOCAL</h1>
+                <p class="logo-subtitle">SMA UNGGUL BINA KASIH NUSANTARA</p>
             </div>
 
             <!-- Error Alert (dari PHP) -->
@@ -338,8 +377,10 @@
                     </label>
                 </div>
 
-                <button type="submit" class="btn-login">
-                    <i class="fas fa-sign-in-alt"></i> Masuk
+               <button type="submit" class="btn-login" id="btnLogin">
+                    <span class="btn-spinner" aria-hidden="true"></span>
+                    <i class="fas fa-sign-in-alt btn-icon"></i>
+                    <span class="btn-label">Masuk</span>
                 </button>
             </form>
         </div>
@@ -358,77 +399,110 @@
     </div>
 
     <script>
-        const REMEMBER_KEY = 'cat_remember_session';
-        const SESSION_KEY  = 'cat_temp_session';
-        const DURATION_30D = 30 * 24 * 60 * 60 * 1000;
-        const DURATION_8H  =  8 * 60 * 60 * 1000;
+        const REMEMBER_KEY   = 'cat_remember_session';
+        const SESSION_KEY    = 'cat_temp_session';
+        const DURATION_30D   = 30 * 24 * 60 * 60 * 1000;
+        const DURATION_8H    =  8 * 60 * 60 * 1000;
+        const LOGIN_DELAY_MS = 800;
+
+        const form          = document.getElementById('loginForm');
+        const usernameInput = document.getElementById('usernameInput');
+        const passwordInput = document.getElementById('passwordInput');
+        const rememberCheck = document.getElementById('rememberMe');
+        const btnLogin      = document.getElementById('btnLogin');
+        const btnLabel      = btnLogin.querySelector('.btn-label');
+        const toggleBtn     = document.getElementById('togglePasswordBtn');
+        const eyeOn         = document.getElementById('eyeIcon');
+        const eyeOff        = document.getElementById('eyeSlashIcon');
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('<?= app_path_url('sw.js') ?>').catch(() => {});
         }
 
         function togglePassword() {
-            const inp       = document.getElementById('passwordInput');
-            const eyeOn     = document.getElementById('eyeIcon');
-            const eyeOff    = document.getElementById('eyeSlashIcon');
-            const btn       = document.getElementById('togglePasswordBtn');
+            const isHidden = passwordInput.type === 'password';
 
-            if (inp.type === 'password') {
-                inp.type = 'text';
-                eyeOn.style.display  = 'none';
-                eyeOff.style.display = 'block';
-                btn.style.color = '#6366f1';
-            } else {
-                inp.type = 'password';
-                eyeOn.style.display  = 'block';
-                eyeOff.style.display = 'none';
-                btn.style.color = '#94a3b8';
+            passwordInput.type     = isHidden ? 'text' : 'password';
+            eyeOn.style.display    = isHidden ? 'none'  : 'block';
+            eyeOff.style.display   = isHidden ? 'block' : 'none';
+            toggleBtn.style.color  = isHidden ? '#6366f1' : '#94a3b8';
+        }
+
+        function saveSession(username, remember) {
+            const payload = JSON.stringify({
+                username,
+                remember,
+                expiry  : Date.now() + (remember ? DURATION_30D : DURATION_8H),
+                savedAt : new Date().toLocaleString('id-ID')
+            });
+
+            try {
+                if (remember) {
+                    localStorage.setItem(REMEMBER_KEY, payload);
+                    sessionStorage.removeItem(SESSION_KEY);
+                } else {
+                    sessionStorage.setItem(SESSION_KEY, payload);
+                    localStorage.removeItem(REMEMBER_KEY);
+                }
+            } catch (err) {
+                // Storage diblokir (mode privat / kebijakan browser) — abaikan
             }
         }
 
-        document.getElementById('rememberMe').addEventListener('change', function () {
-            // durationHint removed — no-op
-        });
-
-        document.getElementById('loginForm').addEventListener('submit', function () {
-            const username = document.getElementById('usernameInput').value.trim();
-            const remember = document.getElementById('rememberMe').checked;
-            if (!username) return;
-
-            const payload = JSON.stringify({
-                username : username,
-                remember : remember,
-                expiry   : Date.now() + (remember ? DURATION_30D : DURATION_8H),
-                savedAt  : new Date().toLocaleString('id-ID')
-            });
-
-            if (remember) {
-                localStorage.setItem(REMEMBER_KEY, payload);
-                sessionStorage.removeItem(SESSION_KEY);
-            } else {
-                sessionStorage.setItem(SESSION_KEY, payload);
+        function clearSession() {
+            try {
                 localStorage.removeItem(REMEMBER_KEY);
-            }
-        });
+                sessionStorage.removeItem(SESSION_KEY);
+            } catch (err) {}
+        }
 
-        (function loadSession() {
-            const raw = localStorage.getItem(REMEMBER_KEY) || sessionStorage.getItem(SESSION_KEY);
+        function loadSession() {
+            let raw;
+            try {
+                raw = localStorage.getItem(REMEMBER_KEY) || sessionStorage.getItem(SESSION_KEY);
+            } catch (err) {
+                return;
+            }
             if (!raw) return;
 
             let data;
             try { data = JSON.parse(raw); } catch { return; }
 
             if (Date.now() > data.expiry) {
-                localStorage.removeItem(REMEMBER_KEY);
-                sessionStorage.removeItem(SESSION_KEY);
+                clearSession();
                 return;
             }
 
-            document.getElementById('usernameInput').value = data.username;
-            if (data.remember) {
-                document.getElementById('rememberMe').checked = true;
+            usernameInput.value  = data.username;
+            rememberCheck.checked = !!data.remember;
+        }
+
+        function setLoading(isLoading) {
+            btnLogin.classList.toggle('loading', isLoading);
+            btnLabel.textContent = isLoading ? 'Memproses...' : 'Masuk';
+        }
+
+        form.addEventListener('submit', function (e) {
+            const username = usernameInput.value.trim();
+            if (!username) return;
+
+            if (btnLogin.classList.contains('loading')) {
+                e.preventDefault();
+                return;
             }
-        })();
+
+            saveSession(username, rememberCheck.checked);
+            setLoading(true);
+
+            e.preventDefault();
+            setTimeout(() => form.submit(), LOGIN_DELAY_MS);
+        });
+
+        window.addEventListener('pageshow', function (e) {
+            if (e.persisted) setLoading(false);
+        });
+
+        loadSession();
     </script>
 </body>
 </html>

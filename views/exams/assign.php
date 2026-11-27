@@ -1,3 +1,58 @@
+<?php
+if (!function_exists('urutkanSoal')) {
+    function nomorSoal(array $q)
+    {
+        // Utamakan nomor dari teks "Soal PDF #N"
+        $teks = html_entity_decode(strip_tags((string)($q['question_text'] ?? '')), ENT_QUOTES, 'UTF-8');
+        if (preg_match('/#\s*(\d+)/u', $teks, $m)) {
+            return (int)$m[1];
+        }
+        if (isset($q['question_number']) && $q['question_number'] !== '' && $q['question_number'] !== null) {
+            return (int)$q['question_number'];
+        }
+        return 1000000;
+    }
+
+    function urutkanSoal(array $questions): array
+    {
+        // Beri indeks asli supaya urutan stabil
+        foreach ($questions as $i => &$q) {
+            $q['_idx'] = $i;
+        }
+        unset($q);
+
+        // id terbesar per PDF -> menentukan PDF mana yang tampil lebih dulu
+        $grpMax = [];
+        foreach ($questions as $q) {
+            $pdf = (string)($q['pdf_file'] ?? '');
+            if ($pdf !== '') {
+                $grpMax[$pdf] = max($grpMax[$pdf] ?? 0, (int)$q['id']);
+            }
+        }
+
+        usort($questions, function ($a, $b) use ($grpMax) {
+            $c = strcasecmp((string)($a['subject_name'] ?? ''), (string)($b['subject_name'] ?? ''));
+            if ($c !== 0) return $c;
+
+            $pa = (string)($a['pdf_file'] ?? '');
+            $pb = (string)($b['pdf_file'] ?? '');
+            $ga = $pa !== '' ? $grpMax[$pa] : (int)$a['id'];
+            $gb = $pb !== '' ? $grpMax[$pb] : (int)$b['id'];
+            if ($ga !== $gb) return $gb <=> $ga;          // PDF terbaru di atas
+
+            if ($pa !== $pb) return strcmp($pa, $pb);     // jaga satu PDF tetap satu blok
+
+            $na = nomorSoal($a);
+            $nb = nomorSoal($b);
+            if ($na !== $nb) return $na <=> $nb;          // 1, 2, 3, ... naik
+
+            return $a['_idx'] <=> $b['_idx'];
+        });
+
+        return $questions;
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="id">
 
@@ -31,7 +86,7 @@
         }
     </script>
     <script id="MathJax-script" async src="<?= asset_url('mathjax/tex-mml-chtml.js') ?>"></script>
-        <style>
+    <style>
         :root {
             --primary: #6366f1;
             --primary-dark: #4f46e5;
@@ -531,7 +586,7 @@
                 });
             </script>
 
-            <form method="POST" id="assignForm">
+            <form method="POST" id="assignForm" onsubmit="return validateAssignForm()">
                 <div style="margin-top:2rem; margin-bottom:2rem; display:flex; gap:1rem;">
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-paper-plane"></i> Submit Soal
@@ -546,7 +601,7 @@
                     <div id="subjectSections">
                         <?php foreach ($examSubjects as $index => $examSubject):
                             $subjectId = $examSubject['subject_id'];
-                            $questions = $questionsBySubject[$subjectId] ?? [];
+                            $questions = urutkanSoal($questionsBySubject[$subjectId] ?? []);
                         ?>
                             <div class="subject-section"
                                 draggable="true"
@@ -710,7 +765,7 @@
                         </div>
 
                         <div class="question-list" data-group="single">
-                            <?php foreach ($allQuestions as $q):
+                            <?php foreach (urutkanSoal($allQuestions) as $q):
                                 // Tambahkan kondisi khusus untuk soal PDF
                                 if ($q['type'] === 'pdf') {
                                     $tBg = '#f0f7ff';
@@ -983,6 +1038,25 @@
         window.addEventListener('load', function() {
             if (typeof MathJax !== 'undefined') MathJax.typesetPromise().catch(e => console.log(e));
         });
+
+        function validateAssignForm() {
+            const checkboxes = document.querySelectorAll('#assignForm input[type="checkbox"]:checked');
+            const seen = {};
+            const dupes = [];
+            for (const cb of checkboxes) {
+                const val = cb.value;
+                if (seen[val]) {
+                    if (!dupes.includes(val)) dupes.push(val);
+                } else {
+                    seen[val] = true;
+                }
+            }
+            if (dupes.length > 0) {
+                alert('Soal duplikat tidak diperbolehkan dalam satu ujian: ID ' + dupes.join(', ') + ' dipilih lebih dari sekali.');
+                return false;
+            }
+            return true;
+        }
     </script>
 </body>
 
