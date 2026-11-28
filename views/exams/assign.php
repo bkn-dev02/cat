@@ -494,39 +494,6 @@ if (!function_exists('urutkanSoal')) {
                 <?php if ($exam['exam_type'] === 'multi'): ?>
                     <p style="color:#64748b; margin-top:0.5rem;">Ujian Multi Mata Pelajaran (Tryout Paket)</p>
                 <?php endif; ?>
-
-                <!-- Upload PDF -->
-                <div style="background:#fef3c7; border:2px solid #fbbf24; padding:1rem; border-radius:0.75rem; margin-top:1rem;">
-                    <h4 style="margin:0 0 0.5rem 0; color:#92400e;"><i class="fas fa-file-pdf"></i> Atau Upload PDF Soal</h4>
-                    <p style="margin:0 0 1rem 0; color:#78350f; font-size:0.875rem;">Untuk ujian dengan jawaban di kertas, upload PDF soal.</p>
-                    <button type="button" class="btn" style="background:#f59e0b; color:white; padding:0.75rem 1.5rem; border:none; border-radius:0.5rem; font-weight:600; cursor:pointer;" onclick="document.getElementById('pdfUploadModal').style.display='flex'">
-                        <i class="fas fa-upload"></i> Upload PDF Soal
-                    </button>
-
-                    <?php
-                    // PERBAIKAN PATH PDF: Mencegah double slash dan memastikan ada 'public/'
-                    $examPdf = $exam['exam_pdf'] ?? '';
-                    $examPdfViewUrl = '';
-                    if ($examPdf) {
-                        $fileName = basename($examPdf);
-                        $cleanPath = ltrim($examPdf, '/');
-                        if (strpos($cleanPath, 'public/') !== 0) {
-                            $cleanPath = 'public/' . $cleanPath;
-                        }
-                        $examPdfViewUrl = rtrim(config('app_url'), '/') . '/' . $cleanPath;
-                    }
-                    ?>
-
-                    <?php if (!empty($examPdf)): ?>
-                        <div style="margin-top:1rem; padding:0.75rem; background:white; border-radius:0.5rem; display:flex; align-items:center; flex-wrap:wrap; gap:10px;">
-                            <i class="fas fa-file-pdf" style="color:#ef4444; font-size:1.2rem;"></i>
-                            <strong style="color:#1e293b;"><?= htmlspecialchars(basename($examPdf)) ?></strong>
-                            <a href="<?= htmlspecialchars($examPdfViewUrl) ?>" target="_blank" style="color:#2563eb; text-decoration:none; font-weight:600; display:inline-flex; align-items:center; gap:5px; background:#eff6ff; padding:4px 10px; border-radius:6px; transition:0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
-                                <i class="fas fa-external-link-alt"></i> Lihat PDF
-                            </a>
-                        </div>
-                    <?php endif; ?>
-                </div>
             </div>
 
             <!-- PDF Upload Modal -->

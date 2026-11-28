@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reset Suspend / Auto-Submit Ujian</title>
+    <link rel="icon" href="<?= asset_url('images/cat.png') ?>" type="image/x-icon">
+    <title>Reset Ujian | CAT SMAU BINA KASIH NUSANTARA</title>
     <link href="<?= asset_url('vendor/bootstrap/5.3.0/dist/css/bootstrap.min.css') ?>" rel="stylesheet">
     <link href="<?= asset_url('vendor/fontawesome/6.0.0/css/all.min.css') ?>" rel="stylesheet">
     <style>

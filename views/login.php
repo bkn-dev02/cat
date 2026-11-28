@@ -4,13 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - CAT Enterprise</title>
-    <link rel="icon" type="image/png" href="<?= asset_url('cat.png') ?>">
+    <link rel="icon" href="<?= asset_url('images/cat.png') ?>" type="image/x-icon">
+    <title>Login Page | CAT SMA UNGGUL BINA KASIH NUSANTARA</title>
     <link rel="manifest" href="<?= app_path_url('manifest.json') ?>">
     <meta name="theme-color" content="#6366f1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="CAT Enterprise">
+    <meta name="apple-mobile-web-app-title" content="CAT SMA UNGGUL BINA KASIH NUSANTARA">
     <link rel="apple-touch-icon" href="<?= asset_url('cat.png') ?>">
     <!-- Aset CSS lokal — CSS fallback inline di bawah menjaga tampilan jika aset gagal dimuat -->
     <link href="<?= asset_url('vendor/bootstrap/5.3.0/dist/css/bootstrap.min.css') ?>" rel="stylesheet">

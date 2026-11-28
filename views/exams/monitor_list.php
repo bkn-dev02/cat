@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="<?= asset_url('images/cat.png') ?>" type="image/x-icon">
     <title>Monitor Ujian - CAT System</title>
     <link href="<?= $bootstrapCssUrl ?>" rel="stylesheet">
     <link href="<?= $fontAwesomeCssUrl ?>" rel="stylesheet">
@@ -138,12 +139,22 @@
             color: var(--muted);
         }
 
-        /* ===== Statistik 2x2 ===== */
+        /* ===== Statistik 3 baris ===== */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: 1fr;
             gap: .5rem;
             margin: 1rem 0;
+        }
+
+        .stat-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: .5rem;
+        }
+
+        .stat-row:first-child {
+            grid-template-columns: 1fr;
         }
 
         .stat-item {
@@ -316,21 +327,31 @@
                         </div>
 
                         <div class="stats-grid">
-                            <div class="stat-item">
-                                <span class="stat-number" style="color:var(--dark);"><?= $exam['total_count'] ?></span>
-                                <span class="stat-label">Total peserta</span>
+                            <div class="stat-row">
+                                <div class="stat-item">
+                                    <span class="stat-number" style="color:var(--dark);"><?= $exam['total_count'] ?></span>
+                                    <span class="stat-label">Total peserta</span>
+                                </div>
                             </div>
-                            <div class="stat-item">
-                                <span class="stat-number" style="color:var(--success);"><?= $exam['active_count'] ?></span>
-                                <span class="stat-label">Sedang ujian</span>
+                            <div class="stat-row">
+                                <div class="stat-item">
+                                    <span class="stat-number" style="color:var(--success);"><?= $exam['active_count'] ?></span>
+                                    <span class="stat-label">Sedang ujian</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-number" style="color:var(--warning);"><?= $exam['not_started_count'] ?></span>
+                                    <span class="stat-label">Belum ujian</span>
+                                </div>
                             </div>
-                            <div class="stat-item">
-                                <span class="stat-number" style="color:var(--warning);"><?= $exam['not_started_count'] ?></span>
-                                <span class="stat-label">Belum ujian</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-number" style="color:var(--primary);"><?= $exam['submitted_count'] ?></span>
-                                <span class="stat-label">Sudah submit</span>
+                            <div class="stat-row">
+                                <div class="stat-item">
+                                    <span class="stat-number" style="color:var(--primary);"><?= $exam['submitted_count'] ?></span>
+                                    <span class="stat-label">Sudah submit</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-number" style="color:var(--danger);"><?= $exam['suspended_count'] ?? 0 ?></span>
+                                    <span class="stat-label">Suspend</span>
+                                </div>
                             </div>
                         </div>
 

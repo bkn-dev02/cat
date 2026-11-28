@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="<?= asset_url('images/cat.png') ?>" type="image/x-icon">
     <title>Monitor: <?= htmlspecialchars($exam['title']) ?> - CAT Enterprise</title>
     <link href="<?= asset_url('vendor/bootstrap/5.3.0/dist/css/bootstrap.min.css') ?>" rel="stylesheet">
     <link href="<?= asset_url('vendor/fontawesome/6.0.0/css/all.min.css') ?>" rel="stylesheet">
@@ -250,19 +251,19 @@
 
         <!-- Daftar Peserta -->
         <div class="card-glass">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:1rem;flex-wrap:wrap;">
-                <h5 style="font-weight:700;color:#1e293b;margin:0"><i class="fas fa-users" style="color:#6366f1"></i> Daftar Peserta</h5>
-                <div style="display:flex;align-items:center;gap:0.5rem;">
-                    <select id="statusFilter" style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:12px;color:#374151;">
-                        <option value="all">Semua Status</option>
-                        <option value="active">Sedang Ujian</option>
-                        <option value="submitted">Selesai</option>
-                        <option value="suspended">Ter-suspend</option>
-                        <option value="pending">Belum Ujian</option>
-                    </select>
-                    <span class="refresh-indicator"><i class="fas fa-sync-alt pulse"></i> Update otomatis setiap 15 detik</span>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;gap:1rem;flex-wrap:wrap;">
+                <div style="width:100%; display:flex; justify-content:space-between; align-items:flex-start;gap:0.5rem;flex-wrap:wrap;">
+                    <div id="statusTabs" style="display:flex;gap:0;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;">
+                        <button type="button" class="status-tab active" data-filter="all" style="flex:1;min-width:150px;padding:10px 16px;border:1px solid #e2e8f0;border-top-left-radius:12px;border-top-right-radius:12px;background:#fff;color:#6366f1;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;text-align:center;position:relative;">All <span class="tab-badge" style="position:absolute;top:6px;right:8px;background:#6366f1;color:#fff;width:20px;height:20px;line-height:20px;border-radius:10px;text-align:center;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">-</span></button>
+                        <button type="button" class="status-tab" data-filter="active" style="flex:1;min-width:150px;padding:10px 16px;border:1px solid #e2e8f0;border-top-left-radius:12px;border-top-right-radius:12px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;text-align:center;position:relative;">Sedang Ujian <span class="tab-badge" style="position:absolute;top:6px;right:8px;background:#6366f1;color:#fff;width:20px;height:20px;line-height:20px;border-radius:10px;text-align:center;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">-</span></button>
+                        <button type="button" class="status-tab" data-filter="pending" style="flex:1;min-width:150px;padding:10px 16px;border:1px solid #e2e8f0;border-top-left-radius:12px;border-top-right-radius:12px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;text-align:center;position:relative;">Belum Ujian <span class="tab-badge" style="position:absolute;top:6px;right:8px;background:#6366f1;color:#fff;width:20px;height:20px;line-height:20px;border-radius:10px;text-align:center;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">-</span></button>
+                        <button type="button" class="status-tab" data-filter="submitted" style="flex:1;min-width:150px;padding:10px 16px;border:1px solid #e2e8f0;border-top-left-radius:12px;border-top-right-radius:12px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;text-align:center;position:relative;">Selesai <span class="tab-badge" style="position:absolute;top:6px;right:8px;background:#6366f1;color:#fff;width:20px;height:20px;line-height:20px;border-radius:10px;text-align:center;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">-</span></button>
+                        <button type="button" class="status-tab" data-filter="suspended" style="flex:1;min-width:150px;padding:10px 16px;border:1px solid #e2e8f0;border-top-left-radius:12px;border-top-right-radius:12px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;text-align:center;position:relative;">Ter-suspend <span class="tab-badge" style="position:absolute;top:6px;right:8px;background:#6366f1;color:#fff;width:20px;height:20px;line-height:20px;border-radius:10px;text-align:center;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">-</span></button>
+                    </div>
+                    <input type="text" id="nameSearch" placeholder="Cari nama, email, atau kelas..." style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;font-size:13px;color:#374151;width:220px;min-width:150px;">
                 </div>
             </div>
+            <div style="border-top:1px solid #e2e8f0;margin-top:-1px;"></div>
             <div id="students-container">
                 <div style="text-align:center;padding:3rem;color:#64748b">
                     <i class="fas fa-spinner fa-spin" style="font-size:2rem;margin-bottom:1rem"></i>
@@ -279,6 +280,10 @@
         let lastActiveCount = 0;
         let monitorSessions = new Map();
         let currentStatusFilter = 'all';
+        let currentSearch = '';
+        let searchDebounceTimer = null;
+        let currentSummary = null;
+        let currentPage = 1;
 
         function normalizeStatus(s) {
             if (s.status === 'active' || s.status === 'in_progress') return 'active';
@@ -331,6 +336,7 @@
         }
 
         function updateStats(summary) {
+            currentSummary = summary;
             const total = summary.total_participants ?? 0;
             const active = summary.active_count ?? 0;
             const notStarted = summary.not_started_count ?? 0;
@@ -350,9 +356,27 @@
                 <div class="col-6 col-md"><div class="stat-card"><span class="stat-number" style="color:#6366f1">${submitted}</span><div class="stat-label">Sudah Submit</div></div></div>
                 <div class="col-6 col-md"><div class="stat-card"><span class="stat-number" style="color:#ef4444">${suspended}</span><div class="stat-label">Ter-suspend</div></div></div>
             `;
+
+            updateTabBadges();
         }
 
-        function updateStudentsList(sessions) {
+        function updateTabBadges() {
+            if (!currentSummary) return;
+            const counts = {
+                all: currentSummary.total_participants ?? 0,
+                active: currentSummary.active_count ?? 0,
+                pending: currentSummary.not_started_count ?? 0,
+                submitted: currentSummary.submitted_count ?? 0,
+                suspended: currentSummary.suspended_count ?? 0
+            };
+            document.querySelectorAll('.status-tab').forEach(btn => {
+                const filter = btn.dataset.filter;
+                const badge = btn.querySelector('.tab-badge');
+                if (badge) badge.textContent = counts[filter] ?? 0;
+            });
+        }
+
+        function updateStudentsList(sessions, pagination) {
             monitorSessions = new Map(sessions.map(x => [String(x.id), x]));
             if (sessions.length === 0) {
                 document.getElementById('students-container').innerHTML = `
@@ -369,12 +393,23 @@
                 sessions :
                 sessions.filter(s => normalizeStatus(s) === currentStatusFilter);
 
-            if (filtered.length === 0) {
+            // Live search berdasarkan nama, email (username), atau kelas
+            const search = currentSearch.toLowerCase();
+            const searched = search === '' ?
+                filtered :
+                filtered.filter(s => {
+                    const nama = (s.full_name || '').toLowerCase();
+                    const email = (s.username || '').toLowerCase();
+                    const kelas = (s.kelas || '').toLowerCase();
+                    return nama.includes(search) || email.includes(search) || kelas.includes(search);
+                });
+
+            if (searched.length === 0) {
                 document.getElementById('students-container').innerHTML = `
                     <div style="text-align:center;padding:3rem;color:#64748b">
                         <i class="fas fa-search" style="font-size:3rem;margin-bottom:1rem;opacity:0.4"></i>
                         <h5>Tidak Ada Peserta</h5>
-                        <p>Tidak ada peserta dengan status tersebut.</p>
+                        <p>Tidak ada peserta yang cocok dengan pencarian.</p>
                     </div>`;
                 return;
             }
@@ -384,14 +419,15 @@
             if (isMobile) {
                 // Mobile: card layout
                 let cards = '';
-                filtered.forEach(s => {
+                searched.forEach((s, idx) => {
                     const pct = s.total_questions > 0 ? Math.round(s.answered_count / s.total_questions * 100) : 0;
                     let statusColor = s.status === 'active' || s.status === 'in_progress' ? '#10b981' :
                         s.status === 'submitted' || s.status === 'completed' ? '#6366f1' :
                         s.status === 'suspended' ? '#ef4444' : '#64748b';
                     let statusText = s.status === 'active' || s.status === 'in_progress' ? 'Sedang Ujian' :
                         s.status === 'submitted' || s.status === 'completed' ? 'Selesai' :
-                        s.status === 'suspended' ? 'Ter-suspend' : s.status;
+                        s.status === 'suspended' ? 'Ter-suspend' :
+                        s.status === 'pending' ? 'Belum Ujian' : s.status;
 
                     const reason = s.suspension_reason === 'tab_switch' ? 'Pindah Tab' :
                         s.suspension_reason === 'fullscreen_exit' ? 'Keluar Fullscreen' :
@@ -417,7 +453,7 @@
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                             <div class="progress-wrap" style="width:100px"><div class="progress-fill" style="width:${pct}%"></div></div>
-                            <span style="font-size:12px;font-weight:600;color:#374151;white-space:nowrap">${s.answered_count}/${s.total_questions} (${pct}%)</span>
+                            <span style="font-size:12px;font-weight:600;color:#374151;white-space:nowrap">${s.answered_count}/${s.total_questions}</span>
                         </div>
                         <div style="font-size:11px;color:#64748b;display:flex;gap:12px">
                             <span><i class="fas fa-clock"></i> ${(s.status === 'active' || s.status === 'in_progress') ? formatTime(s.remaining_seconds) : '-'}</span>
@@ -431,13 +467,13 @@
             } else {
                 // Desktop: div-based layout (teks bisa melebar, tidak kena batasan kolom tabel)
                 let rows = '';
-                filtered.forEach(s => {
+                searched.forEach((s, idx) => {
                     const pct = s.total_questions > 0 ? Math.round(s.answered_count / s.total_questions * 100) : 0;
                     let badge = '';
                     if (s.status === 'active' || s.status === 'in_progress') badge = `<span class="badge-active"><i class="fas fa-circle" style="font-size:8px"></i> Sedang Ujian</span>`;
                     else if (s.status === 'submitted' || s.status === 'completed' || s.status === 'graded') badge = `<span class="badge-submitted"><i class="fas fa-check-circle" style="font-size:10px"></i> Selesai</span>`;
                     else if (s.status === 'suspended') badge = `<span class="badge-suspended"><i class="fas fa-ban" style="font-size:10px"></i> Ter-suspend</span>`;
-                    else badge = `<span class="badge-pending">${s.status}</span>`;
+                    else badge = `<span class="badge-pending">Belum Ujian</span>`;
 
                     const submitTime = s.submitted_at ? new Date(s.submitted_at).toLocaleTimeString('id-ID') : '-';
 
@@ -458,6 +494,7 @@
                     }
 
                     rows += `<div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid #f1f5f9;flex-wrap:nowrap;">
+                        <div style="flex:0 0 auto;width:40px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#64748b;font-size:13px;white-space:nowrap;">${idx + 1}</div>
                         <div style="flex:0 0 auto;width:280px;display:flex;align-items:center;">
                             <div>
                                 <div style="font-weight:600;color:#1e293b;font-size:14px;white-space:nowrap;">${s.full_name || '-'}</div>
@@ -469,7 +506,6 @@
                         <div style="flex:0 0 auto;width:180px;display:flex;align-items:center;gap:8px;">
                             <div class="progress-wrap" style="width:100px"><div class="progress-fill" style="width:${pct}%"></div></div>
                             <span style="font-size:13px;font-weight:600;color:#374151;white-space:nowrap">${s.answered_count}/${s.total_questions}</span>
-                            <span style="font-size:12px;color:#64748b;white-space:nowrap">(${pct}%)</span>
                         </div>
                         <div style="flex:0 0 auto;width:110px;font-size:13px;color:#374151;white-space:nowrap">${(s.status === 'active' || s.status === 'in_progress') ? formatTime(s.remaining_seconds) : '-'}</div>
                         <div style="flex:0 0 auto;width:100px;font-size:13px;color:#374151;white-space:nowrap">${submitTime}</div>
@@ -481,6 +517,7 @@
                 document.getElementById('students-container').innerHTML = `
                     <div id="table-scroll-wrap" style="overflow-x:auto">
                         <div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:2px solid #e2e8f0;background:#f8fafc;flex-wrap:nowrap;">
+                            <div style="flex:0 0 auto;width:40px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;text-align:center;">No</div>
                             <div style="flex:0 0 auto;width:280px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Siswa</div>
                             <div style="flex:0 0 auto;width:110px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Status</div>
                             <div style="flex:0 0 auto;width:180px;font-weight:700;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Progress</div>
@@ -505,12 +542,81 @@
                 button.addEventListener('click', () => resumeSession(button.dataset.sessionId, button));
             });
 
-            document.getElementById('statusFilter').addEventListener('change', (e) => {
-                currentStatusFilter = e.target.value;
-                // Re-render dengan filter baru menggunakan data yang sudah disimpan
-                const all = Array.from(monitorSessions.values());
-                updateStudentsList(all);
+            document.querySelectorAll('.status-tab').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.status-tab').forEach(b => {
+                        b.classList.remove('active');
+                        b.style.background = '#f8fafc';
+                        b.style.color = '#64748b';
+                    });
+                    btn.classList.add('active');
+                    btn.style.background = '#fff';
+                    btn.style.color = '#6366f1';
+                    currentStatusFilter = btn.dataset.filter;
+                    currentPage = 1;
+                    fetchData();
+                });
             });
+
+            document.getElementById('nameSearch').addEventListener('input', (e) => {
+                currentSearch = e.target.value;
+                currentPage = 1;
+                if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = setTimeout(() => {
+                    const all = Array.from(monitorSessions.values());
+                    updateStudentsList(all, null);
+                }, 300);
+            });
+
+            // Render pagination controls
+            if (pagination && pagination.total > pagination.per_page) {
+                const lastPage = pagination.last_page;
+                const current = pagination.current_page;
+                let phtml = '<div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap;">';
+
+                // Prev
+                phtml += `<button type="button" onclick="goToPage(${current - 1})" ${current <= 1 ? 'disabled' : ''} style="padding:6px 12px;border:1px solid #e2e8f0;border-radius:6px;background:${current <= 1 ? '#f1f5f9' : '#fff'};color:${current <= 1 ? '#94a3b8' : '#374151'};font-size:12px;cursor:${current <= 1 ? 'not-allowed' : 'pointer'}">Sebelumnya</button>`;
+
+                // Page numbers
+                let start = Math.max(1, current - 2);
+                let end = Math.min(lastPage, current + 2);
+                if (start > 1) {
+                    phtml += `<button type="button" onclick="goToPage(1)" style="padding:6px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#374151;font-size:12px;cursor:pointer">1</button>`;
+                    if (start > 2) phtml += `<span style="font-size:12px;color:#64748b">...</span>`;
+                }
+                for (let i = start; i <= end; i++) {
+                    phtml += `<button type="button" onclick="goToPage(${i})" style="padding:6px 12px;border:1px solid #e2e8f0;border-radius:6px;background:${i === current ? '#6366f1' : '#fff'};color:${i === current ? '#fff' : '#374151'};font-size:12px;font-weight:${i === current ? '700' : '600'};cursor:pointer">${i}</button>`;
+                }
+                if (end < lastPage) {
+                    if (end < lastPage - 1) phtml += `<span style="font-size:12px;color:#64748b">...</span>`;
+                    phtml += `<button type="button" onclick="goToPage(${lastPage})" style="padding:6px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#374151;font-size:12px;cursor:pointer">${lastPage}</button>`;
+                }
+
+                // Next
+                phtml += `<button type="button" onclick="goToPage(${current + 1})" ${current >= lastPage ? 'disabled' : ''} style="padding:6px 12px;border:1px solid #e2e8f0;border-radius:6px;background:${current >= lastPage ? '#f1f5f9' : '#fff'};color:${current >= lastPage ? '#94a3b8' : '#374151'};font-size:12px;cursor:${current >= lastPage ? 'not-allowed' : 'pointer'}">Selanjutnya</button>`;
+
+                // Info
+                phtml += `<span style="font-size:12px;color:#64748b;margin-left:8px">${pagination.from} - ${pagination.to} dari ${pagination.total}</span>`;
+
+                phtml += '</div>';
+
+                // Insert pagination after students-container
+                let container = document.getElementById('students-container');
+                let existing = document.getElementById('pagination-controls');
+                if (existing) existing.remove();
+                const pdiv = document.createElement('div');
+                pdiv.id = 'pagination-controls';
+                pdiv.innerHTML = phtml;
+                container.parentNode.insertBefore(pdiv, container.nextSibling);
+            } else {
+                let existing = document.getElementById('pagination-controls');
+                if (existing) existing.remove();
+            }
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            fetchData();
         }
 
         let isFetching = false;
@@ -526,7 +632,7 @@
             const wrap = document.getElementById('table-scroll-wrap');
             const scrollLeft = wrap ? wrap.scrollLeft : 0;
 
-            fetch(`${baseUrl}/exam/monitorData/${examId}`)
+            fetch(`${baseUrl}/exam/monitorData/${examId}?status=${encodeURIComponent(currentStatusFilter)}&page=${currentPage}&limit=50`)
                 .then(r => {
                     if (!r.ok) throw new Error('HTTP ' + r.status);
                     return r.json();
@@ -534,7 +640,7 @@
                 .then(result => {
                     if (result.success) {
                         updateStats(result.summary);
-                        updateStudentsList(result.data);
+                        updateStudentsList(result.data, result.pagination);
                         // Restore posisi scroll setelah render
                         const newWrap = document.getElementById('table-scroll-wrap');
                         if (newWrap && scrollLeft > 0) newWrap.scrollLeft = scrollLeft;
@@ -671,14 +777,14 @@
                 });
 
                 // Hasil dinilai dari status terbaru di database
-                const r = await fetch(`${baseUrl}/exam/monitorData/${examId}`, {
+                const r = await fetch(`${baseUrl}/exam/monitorData/${examId}?status=${encodeURIComponent(currentStatusFilter)}&page=${currentPage}&limit=50`, {
                     credentials: 'same-origin'
                 });
                 const result = await r.json();
                 if (!result.success) throw new Error(result.message || 'Gagal memuat data');
 
                 updateStats(result.summary);
-                updateStudentsList(result.data);
+                updateStudentsList(result.data, result.pagination);
 
                 const after = result.data.find(x => String(x.id) === String(sessionId));
                 if (after && after.status !== 'suspended') {
